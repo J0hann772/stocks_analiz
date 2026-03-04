@@ -1,0 +1,101 @@
+version: '3.8'
+
+services:
+  api:
+    build: 
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: stock_analyzer_api
+    ports:
+      - "8000:8000"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=stock_analyzer
+      - POSTGRES_HOST=db
+      - POSTGRES_PORT=5432
+      - REDIS_URL=redis://redis:6379
+      - FMP_API_KEY=${FMP_API_KEY:-""}
+      - TG_BOT_TOKEN=${TG_BOT_TOKEN:-""}
+      - TG_CHAT_ID=${TG_CHAT_ID:-""}
+      - TG_SIGNAL_BOT_TOKEN=${TG_SIGNAL_BOT_TOKEN:-""}
+      - TEAM_PASSWORD=supersecret
+      - TZ=Europe/Moscow
+    volumes:
+      - ./backend:/app
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  db:
+    image: postgres:15
+    container_name: stock_analyzer_db
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=stock_analyzer
+      - TZ=Europe/Moscow
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d stock_analyzer"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7
+    container_name: stock_analyzer_redis
+    expose:
+      - "6379"
+    volumes:
+      - redis_data:/data
+    environment:
+      - TZ=Europe/Moscow
+
+  worker:
+    build: 
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: stock_analyzer_worker
+    command: arq workers.main.WorkerSettings
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=stock_analyzer
+      - POSTGRES_HOST=db
+      - POSTGRES_PORT=5432
+      - REDIS_URL=redis://redis:6379
+      - FMP_API_KEY=${FMP_API_KEY:-""}
+      - TG_BOT_TOKEN=${TG_BOT_TOKEN:-""}
+      - TG_CHAT_ID=${TG_CHAT_ID:-""}
+      - TG_SIGNAL_BOT_TOKEN=${TG_SIGNAL_BOT_TOKEN:-""}
+      - TZ=Europe/Moscow
+    volumes:
+      - ./backend:/app
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: stock_analyzer_frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - TZ=Europe/Moscow
+    depends_on:
+      - api
+
+volumes:
+  postgres_data:
+  redis_data:

@@ -1,0 +1,49 @@
+.git
+.gitignore
+.dockerignore
+.env
+.env.*
+!.env.example
+README.md
+docs/
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+env
+venv
+.venv
+pip-log.txt
+pip-delete-this-directory.txt
+.tox
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+.pytest_cache
+
+# Node
+node_modules
+npm-debug.log
+yarn-error.log
+.next
+out
+build
+dist
+
+# IDEs
+.idea
+.vscode
+*.swp
+*.swo
+
+# Antigravity artifacts/metadata
+.agents
+.agent
+.gemini

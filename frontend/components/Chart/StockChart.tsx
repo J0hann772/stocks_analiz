@@ -1,0 +1,421 @@
+'use client';
+
+import { useEffect, useRef, useState } from 'react';
+import {
+  createChart,
+  IChartApi,
+  ColorType,
+  CrosshairMode,
+  ISeriesApi,
+} from 'lightweight-charts';
+import { useTheme } from '@/components/providers/ThemeProvider';
+import type { OHLCVBar, ChartMarker } from '@/types';
+import styles from './StockChart.module.css';
+
+export interface StockIndicator {
+  key: string;
+  id: string; // The raw config ID
+  config: any; // The raw config object
+  color: string;
+  values: { time: string; value: number }[];
+  pane?: number;
+}
+
+interface Props {
+  data: OHLCVBar[];
+  markers?: ChartMarker[];
+  indicators?: StockIndicator[];
+  height?: number;
+  showVolume?: boolean;
+  onUpdateIndicator?: (config: any) => void;
+  onRemoveIndicator?: (id: string) => void;
+  onSettingsClick?: (config: any) => void;
+}
+
+const DARK_OPTS = {
+  layout: { background: { type: ColorType.Solid, color: '#0d1117' }, textColor: '#8b949e' },
+  grid: { vertLines: { color: '#21262d' }, horzLines: { color: '#21262d' } },
+  crosshair: {
+    mode: CrosshairMode.Normal,
+    vertLine: { labelBackgroundColor: '#1c2128' },
+    horzLine: { labelBackgroundColor: '#1c2128' },
+  },
+};
+
+const LIGHT_OPTS = {
+  layout: { background: { type: ColorType.Solid, color: '#ffffff' }, textColor: '#656d76' },
+  grid: { vertLines: { color: '#e2e7ed' }, horzLines: { color: '#e2e7ed' } },
+  crosshair: { mode: CrosshairMode.Normal },
+};
+
+// SVG Icons for inline controls
+const EyeIcon = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>;
+const EyeOffIcon = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>;
+const GearIcon = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>;
+const TrashIcon = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>;
+
+export function StockChart({ data, markers = [], indicators = [], height = 500, showVolume = true, onUpdateIndicator, onRemoveIndicator, onSettingsClick }: Props) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const mainChartContainerRef = useRef<HTMLDivElement>(null);
+  const extraContainersRef = useRef<(HTMLDivElement | null)[]>([]);
+
+  // Refs to preserve chart state across raw data updates without resetting zoom/layout
+  const chartsRef = useRef<IChartApi[]>([]);
+  const seriesMapRef = useRef<Map<string, ISeriesApi<any>>>(new Map());
+  const mainCandleRef = useRef<ISeriesApi<any> | null>(null);
+  const mainVolRef = useRef<ISeriesApi<any> | null>(null);
+  const prevConfigRef = useRef<string>('');
+  const roRef = useRef<ResizeObserver | null>(null);
+
+  const [indicatorValues, setIndicatorValues] = useState<Record<string, string>>({});
+  const { theme } = useTheme();
+
+  const mainIndicators = indicators.filter(i => (i.pane || 0) === 0 && !i.key.includes('_MA'));
+  const extraPanesMap = new Map<number, StockIndicator[]>();
+  indicators.forEach(ind => {
+    if (ind.pane && ind.pane > 0 && !ind.key.includes('_MA')) {
+      if (!extraPanesMap.has(ind.pane)) extraPanesMap.set(ind.pane, []);
+      extraPanesMap.get(ind.pane)!.push(ind);
+    }
+  });
+  const renderExtraPaneKeys = Array.from(extraPanesMap.keys()).sort();
+
+  useEffect(() => {
+    const currentConfigStr = JSON.stringify({
+      theme,
+      showVolume,
+      inds: indicators.map(i => ({ id: i.id, config: i.config, pane: i.pane, color: i.color }))
+    });
+
+    const isConfigChanged = currentConfigStr !== prevConfigRef.current;
+    
+    if (isConfigChanged || chartsRef.current.length === 0) {
+      // FULL REBUILD: Config changed
+      prevConfigRef.current = currentConfigStr;
+
+      if (roRef.current) roRef.current.disconnect();
+      chartsRef.current.forEach(c => c.remove());
+      chartsRef.current = [];
+      seriesMapRef.current.clear();
+      mainCandleRef.current = null;
+      mainVolRef.current = null;
+
+      if (!mainChartContainerRef.current) return;
+
+      const renderMainIndicators = indicators.filter(i => (i.pane || 0) === 0);
+      const renderExtraPanesMap = new Map<number, StockIndicator[]>();
+      indicators.forEach(ind => {
+        if (ind.pane && ind.pane > 0) {
+          if (!renderExtraPanesMap.has(ind.pane)) renderExtraPanesMap.set(ind.pane, []);
+          renderExtraPanesMap.get(ind.pane)!.push(ind);
+        }
+      });
+      const renderExtraPaneKeysArr = Array.from(renderExtraPanesMap.keys()).sort();
+
+      const charts: IChartApi[] = [];
+      const opts = theme === 'dark' ? DARK_OPTS : LIGHT_OPTS;
+      const baseChartOpts = {
+        ...opts,
+        timeScale: { 
+          rightOffset: 5, 
+          borderColor: 'var(--color-border)', 
+          timeVisible: true,
+          shiftVisibleRangeOnNewBar: true,
+        },
+        rightPriceScale: {
+          scaleMargins: { top: 0.1, bottom: 0.1 },
+          borderColor: 'var(--color-border)',
+          minimumWidth: 95, // Increased further to guarantee exact alignment
+        },
+        handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: true },
+        handleScale: { mouseWheel: true, pinch: true, axisPressedMouseMove: true },
+      };
+
+      const hasExtraPanes = renderExtraPaneKeysArr.length > 0;
+
+      const mainChart = createChart(mainChartContainerRef.current, {
+        ...baseChartOpts,
+        width: mainChartContainerRef.current.clientWidth,
+        height: mainChartContainerRef.current.clientHeight,
+        timeScale: {
+          ...baseChartOpts.timeScale,
+          visible: !hasExtraPanes, // Hide time scale if there are bottom panes
+        }
+      });
+      charts.push(mainChart);
+
+      const candle = mainChart.addCandlestickSeries({
+        upColor: '#3fb950',
+        downColor: '#f85149',
+        borderUpColor: '#3fb950',
+        borderDownColor: '#f85149',
+        wickUpColor: '#3fb950',
+        wickDownColor: '#f85149',
+      });
+      candle.setData(data as any);
+      if (markers.length) candle.setMarkers(markers as any);
+      mainCandleRef.current = candle;
+
+      if (showVolume) {
+        const vol = mainChart.addHistogramSeries({
+          priceFormat: { type: 'volume' },
+          priceScaleId: 'vol',
+        });
+        vol.priceScale().applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
+        vol.setData(data.map(d => ({
+          time: (d as any).time,
+          value: (d as any).volume,
+          color: d.close >= d.open ? 'rgba(63, 185, 80, 0.3)' : 'rgba(248, 81, 73, 0.3)',
+        })) as any);
+        mainVolRef.current = vol;
+      }
+
+      renderMainIndicators.forEach(ind => {
+        const line = mainChart.addLineSeries({ 
+          color: ind.color, 
+          lineWidth: 2,
+          visible: ind.config.visible !== false
+        });
+        line.setData(ind.values as any);
+        seriesMapRef.current.set(ind.id, line);
+      });
+
+      renderExtraPaneKeysArr.forEach((paneKey, idx) => {
+        const container = extraContainersRef.current[idx];
+        if (!container) return;
+
+        const inds = renderExtraPanesMap.get(paneKey)!;
+        const isLastPane = idx === renderExtraPaneKeysArr.length - 1;
+
+        const extraChart = createChart(container, {
+          ...baseChartOpts,
+          width: container.clientWidth,
+          height: container.clientHeight,
+          timeScale: {
+            ...baseChartOpts.timeScale,
+            visible: isLastPane,
+          }
+        });
+        charts.push(extraChart);
+
+        inds.forEach(ind => {
+          const isMA = ind.key.includes('_MA');
+          const line = extraChart.addLineSeries({
+            color: ind.color,
+            lineWidth: isMA ? 1 : 2,
+            visible: ind.config.visible !== false
+          });
+
+          if (ind.key.includes('RSI') && !isMA) {
+            try {
+              const rsiCloud = extraChart.addBaselineSeries({
+                baseValue: { type: 'price', price: 50 },
+                topFillColor1: 'rgba(126, 87, 194, 0.05)',
+                topFillColor2: 'rgba(126, 87, 194, 0.20)',
+                bottomFillColor1: 'rgba(126, 87, 194, 0.20)',
+                bottomFillColor2: 'rgba(126, 87, 194, 0.05)',
+                topLineColor: 'transparent',
+                bottomLineColor: 'transparent',
+                lineWidth: 1,
+                lastValueVisible: false,
+                priceLineVisible: false,
+                crosshairMarkerVisible: false,
+              });
+              rsiCloud.setData(ind.values.map(v => ({ time: v.time, value: 70 })) as any);
+              rsiCloud.applyOptions({ baseValue: { type: 'price', price: 30 } });
+
+              line.createPriceLine({ price: 70, color: 'rgba(248, 81, 73, 0.4)', lineWidth: 1, lineStyle: 2, title: 'OB' });
+              line.createPriceLine({ price: 30, color: 'rgba(63, 185, 80, 0.4)', lineWidth: 1, lineStyle: 2, title: 'OS' });
+            } catch {}
+          }
+          line.setData(ind.values as any);
+          seriesMapRef.current.set(ind.id, line);
+        });
+      });
+
+      // Synchronize zooming and panning across all panes
+      let syncLock = false;
+      charts.forEach((chart, i) => {
+        chart.timeScale().subscribeVisibleLogicalRangeChange((logicalRange) => {
+          if (!logicalRange || syncLock) return;
+          syncLock = true;
+          charts.forEach((otherChart, j) => {
+            if (i !== j) {
+              otherChart.timeScale().setVisibleLogicalRange(logicalRange);
+            }
+          });
+          syncLock = false;
+        });
+
+        chart.timeScale().subscribeVisibleTimeRangeChange((timeRange) => {
+          if (!timeRange || syncLock) return;
+          syncLock = true;
+          charts.forEach((otherChart, j) => {
+            if (i !== j) {
+              // TimeRange syncing is supplementary to logical range to ensure pixel perfection
+              try {
+                const logical = chart.timeScale().getVisibleLogicalRange();
+                if (logical) {
+                  otherChart.timeScale().setVisibleLogicalRange(logical);
+                }
+              } catch {}
+            }
+          });
+          syncLock = false;
+        });
+      });
+
+      charts.forEach((sourceChart, i) => {
+        sourceChart.subscribeCrosshairMove((param: any) => {
+          if (param.time === undefined || param.point === undefined || param.point.x < 0 || param.point.y < 0) {
+             charts.forEach((targetChart, j) => {
+               if (i !== j) targetChart.clearCrosshairPosition();
+             });
+             setIndicatorValues({});
+             return;
+          }
+
+          charts.forEach((targetChart, j) => {
+            if (i !== j) {
+              let targetSeries: ISeriesApi<any> | null = null;
+              if (j === 0 && mainCandleRef.current) {
+                targetSeries = mainCandleRef.current;
+              } else if (j > 0) {
+                const paneKey = renderExtraPaneKeysArr[j - 1];
+                const firstInd = renderExtraPanesMap.get(paneKey)?.[0];
+                if (firstInd) targetSeries = seriesMapRef.current.get(firstInd.id) || null;
+              }
+              
+              if (targetSeries) {
+                try {
+                  // We provide a fictional price just to make the vertical line appear at the correct time
+                  targetChart.setCrosshairPosition(1, param.time, targetSeries);
+                } catch (e) {}
+              }
+            }
+          });
+
+          if (param.time) {
+            const newVals: Record<string, string> = {};
+            indicators.forEach(ind => {
+              const pt = ind.values.find(v => v.time === param.time);
+              if (pt) newVals[ind.id] = pt.value.toFixed(2);
+            });
+            setIndicatorValues(newVals);
+          } else {
+            setIndicatorValues({});
+          }
+        });
+      });
+
+      mainChart.timeScale().fitContent();
+
+      roRef.current = new ResizeObserver(() => {
+        if (mainChartContainerRef.current) {
+           mainChart.resize(mainChartContainerRef.current.clientWidth, mainChartContainerRef.current.clientHeight);
+        }
+        renderExtraPaneKeysArr.forEach((_, idx) => {
+          const c = extraContainersRef.current[idx];
+          if (c) charts[idx + 1].resize(c.clientWidth, c.clientHeight);
+        });
+      });
+      
+      if (containerRef.current) roRef.current.observe(containerRef.current);
+
+      chartsRef.current = charts;
+    } else {
+      // SOFT DATA UPDATE ONLY: Preserves Zoom and manual Y-Scale
+      if (mainCandleRef.current) {
+        mainCandleRef.current.setData(data as any);
+        if (markers.length) mainCandleRef.current.setMarkers(markers as any);
+      }
+      
+      if (mainVolRef.current && showVolume) {
+        mainVolRef.current.setData(data.map(d => ({
+          time: (d as any).time,
+          value: (d as any).volume,
+          color: d.close >= d.open ? 'rgba(63, 185, 80, 0.3)' : 'rgba(248, 81, 73, 0.3)',
+        })) as any);
+      }
+
+      indicators.forEach(ind => {
+        const line = seriesMapRef.current.get(ind.id);
+        if (line) {
+          line.setData(ind.values as any);
+          line.applyOptions({ visible: ind.config.visible !== false });
+        }
+      });
+    }
+  }, [data, markers, indicators, showVolume, theme]);
+
+  // Real unmount cleanup 
+  useEffect(() => {
+    return () => {
+      if (roRef.current) roRef.current.disconnect();
+      chartsRef.current.forEach(c => c.remove());
+    };
+  }, []);
+
+  function renderInlineOverlay(inds: StockIndicator[]) {
+    return (
+      <div className={styles.inlineIndicators}>
+        {inds.map(ind => {
+          const val = indicatorValues[ind.id];
+          const isVisible = ind.config.visible !== false;
+          return (
+            <div key={ind.key} className={styles.indicatorRow}>
+              <span className={styles.indicatorTitle}>{ind.config.type} {ind.config.period}</span>
+              {val && <span className={styles.indicatorValue} style={{ color: ind.color }}>{val}</span>}
+              <div className={styles.indicatorActions}>
+                <button 
+                  className={styles.actionBtn} 
+                  title={isVisible ? "Скрыть" : "Показать"}
+                  onClick={() => onUpdateIndicator?.({ ...ind.config, visible: !isVisible })}
+                >
+                  {isVisible ? <EyeIcon /> : <EyeOffIcon />}
+                </button>
+                <button 
+                  className={styles.actionBtn} 
+                  title="Настройки"
+                  onClick={() => onSettingsClick?.(ind.config)}
+                >
+                  <GearIcon />
+                </button>
+                <button 
+                  className={styles.actionBtn}
+                  title="Удалить"
+                  onClick={() => onRemoveIndicator?.(ind.id)}
+                >
+                  <TrashIcon />
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      ref={containerRef}
+      className={styles.chart}
+      style={{ height: '100%', width: '100%', display: 'flex', flexDirection: 'column', gap: '2px', background: 'var(--color-border)' }}
+    >
+      <div className={styles.paneContainer} style={{ flex: 1, minHeight: '300px' }}>
+        <div ref={mainChartContainerRef} style={{ width: '100%', height: '100%', position: 'absolute' }} />
+        {renderInlineOverlay(mainIndicators)}
+      </div>
+      
+      {renderExtraPaneKeys.map((key, idx) => (
+        <div key={key} className={styles.paneContainer} style={{ height: '25%', minHeight: '150px' }}>
+          <div 
+            ref={(el) => { extraContainersRef.current[idx] = el; }} 
+            style={{ width: '100%', height: '100%', position: 'absolute' }}
+          />
+          {renderInlineOverlay(extraPanesMap.get(key) || [])}
+        </div>
+      ))}
+    </div>
+  );
+}

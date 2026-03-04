@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "skills": {
+    "backtesting-frameworks": {
+      "source": "wshobson/agents",
+      "sourceType": "github",
+      "computedHash": "ab64ca9e1d084ac9a4fe6f21e5445056cf990d86c1c24650d62d387d91f34a06"
+    },
+    "developer-growth-analysis": {
+      "source": "davila7/claude-code-templates",
+      "sourceType": "github",
+      "computedHash": "af382e4194b6ca784e14cfe2aa7df1682c4d42f83807e5785ffab3577fe83176"
+    },
+    "discovery-interview": {
+      "source": "parcadei/Continuous-Claude-v3",
+      "sourceType": "github",
+      "computedHash": "934f3f1a7dd3a35e3a74f5716242ca2642a0efc6bee4f0c5f8b2233d7aefa9f3"
+    },
+    "fullstack-developer": {
+      "source": "Shubhamsaboo/awesome-llm-apps",
+      "sourceType": "github",
+      "computedHash": "92f6f4f9bbdde529237f1840d94c4269abb62ad1d5e41d9c76bd14266001cbe8"
+    }
+  }
+}
