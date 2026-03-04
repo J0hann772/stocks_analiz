@@ -10,6 +10,7 @@ import {
 } from 'lightweight-charts';
 import { useTheme } from '@/components/providers/ThemeProvider';
 import type { OHLCVBar, ChartMarker } from '@/types';
+import type { FMPTckMessage } from '@/hooks/useMarketWebsocket';
 import styles from './StockChart.module.css';
 
 export interface StockIndicator {
@@ -173,7 +174,8 @@ export function StockChart({ data, markers = [], indicators = [], height = 500, 
       renderMainIndicators.forEach(ind => {
         const line = mainChart.addLineSeries({ 
           color: ind.color, 
-          lineWidth: 2,
+          lineWidth: ind.config.lineWidth !== undefined ? ind.config.lineWidth : 2,
+          lineStyle: ind.config.lineStyle !== undefined ? ind.config.lineStyle : 0,
           visible: ind.config.visible !== false
         });
         line.setData(ind.values as any);
@@ -200,36 +202,123 @@ export function StockChart({ data, markers = [], indicators = [], height = 500, 
 
         inds.forEach(ind => {
           const isMA = ind.key.includes('_MA');
-          const line = extraChart.addLineSeries({
-            color: ind.color,
-            lineWidth: isMA ? 1 : 2,
-            visible: ind.config.visible !== false
-          });
-
+          
           if (ind.key.includes('RSI') && !isMA) {
+            // === RSI: Native color-coding with strict data mapping ===
+
+            const currentLineWidth = ind.config.lineWidth !== undefined ? ind.config.lineWidth : 2;
+            const currentLineStyle = ind.config.lineStyle !== undefined ? ind.config.lineStyle : 0;
+            const isVisible = ind.config.visible !== false;
+            
+            const upperBound = ind.config.upperBound !== undefined ? ind.config.upperBound : 70;
+            const lowerBound = ind.config.lowerBound !== undefined ? ind.config.lowerBound : 30;
+            
+            // Helper to clean values (prevent NaN crashes in BaselineSeries)
+            const cleanData = ind.values.map(v => {
+              if ('value' in v && v.value !== undefined && v.value !== null && !isNaN(v.value as number)) {
+                return { time: v.time, value: Number(v.value) };
+              }
+              return { time: v.time };
+            });
+
+            // 1. Background Fill (Purple Band)
             try {
-              const rsiCloud = extraChart.addBaselineSeries({
-                baseValue: { type: 'price', price: 50 },
-                topFillColor1: 'rgba(126, 87, 194, 0.05)',
-                topFillColor2: 'rgba(126, 87, 194, 0.20)',
-                bottomFillColor1: 'rgba(126, 87, 194, 0.20)',
-                bottomFillColor2: 'rgba(126, 87, 194, 0.05)',
+              const bgSeries = extraChart.addBaselineSeries({
+                baseValue: { type: 'price', price: lowerBound },
+                topFillColor1: 'rgba(126, 87, 194, 0.12)',
+                topFillColor2: 'rgba(126, 87, 194, 0.12)',
+                bottomFillColor1: 'transparent',
+                bottomFillColor2: 'transparent',
                 topLineColor: 'transparent',
                 bottomLineColor: 'transparent',
                 lineWidth: 1,
                 lastValueVisible: false,
                 priceLineVisible: false,
                 crosshairMarkerVisible: false,
+                visible: isVisible,
               });
-              rsiCloud.setData(ind.values.map(v => ({ time: v.time, value: 70 })) as any);
-              rsiCloud.applyOptions({ baseValue: { type: 'price', price: 30 } });
+              const bandData = cleanData.map(v => {
+                if ('value' in v) return { time: v.time, value: upperBound };
+                return { time: v.time };
+              });
+              bgSeries.setData(bandData as any);
+            } catch (err) { console.error("RSI Band Error:", err); }
 
-              line.createPriceLine({ price: 70, color: 'rgba(248, 81, 73, 0.4)', lineWidth: 1, lineStyle: 2, title: 'OB' });
-              line.createPriceLine({ price: 30, color: 'rgba(63, 185, 80, 0.4)', lineWidth: 1, lineStyle: 2, title: 'OS' });
-            } catch {}
+            // 2. Overbought Fill (> upperBound)
+            try {
+              const obSeries = extraChart.addBaselineSeries({
+                baseValue: { type: 'price', price: upperBound },
+                topFillColor1: 'rgba(248, 81, 73, 0.35)',
+                topFillColor2: 'rgba(248, 81, 73, 0.05)',
+                bottomFillColor1: 'transparent',
+                bottomFillColor2: 'transparent',
+                topLineColor: 'transparent',
+                bottomLineColor: 'transparent',
+                lineWidth: 1,
+                lastValueVisible: false,
+                priceLineVisible: false,
+                crosshairMarkerVisible: false,
+                visible: isVisible,
+              });
+              obSeries.setData(cleanData as any);
+            } catch (err) { console.error("RSI OB Error:", err); }
+
+            // 3. Oversold Fill (< lowerBound)
+            try {
+              const osSeries = extraChart.addBaselineSeries({
+                baseValue: { type: 'price', price: lowerBound },
+                topFillColor1: 'transparent',
+                topFillColor2: 'transparent',
+                bottomFillColor1: 'rgba(63, 185, 80, 0.05)',
+                bottomFillColor2: 'rgba(63, 185, 80, 0.35)',
+                topLineColor: 'transparent',
+                bottomLineColor: 'transparent',
+                lineWidth: 1,
+                lastValueVisible: false,
+                priceLineVisible: false,
+                crosshairMarkerVisible: false,
+                visible: isVisible,
+              });
+              osSeries.setData(cleanData as any);
+            } catch (err) { console.error("RSI OS Error:", err); }
+
+            // 4. Base RSI Line (Colored Breakouts)
+            const rsiLine = extraChart.addLineSeries({
+              color: ind.color || '#7e57c2',
+              lineWidth: currentLineWidth,
+              lineStyle: currentLineStyle,
+              visible: isVisible,
+              lastValueVisible: true,
+              priceLineVisible: false,
+            });
+            rsiLine.createPriceLine({ price: upperBound, color: 'rgba(248, 81, 73, 0.5)', lineWidth: 1, lineStyle: 2, title: '' });
+            rsiLine.createPriceLine({ price: lowerBound, color: 'rgba(63, 185, 80, 0.5)', lineWidth: 1, lineStyle: 2, title: '' });
+            
+            const rsiColoredData = cleanData.map(v => {
+              if ('value' in v) {
+                const val = (v as any).value;
+                let ptColor = undefined;
+                if (val > upperBound) ptColor = '#f85149';
+                else if (val < lowerBound) ptColor = '#3fb950';
+                return { time: v.time, value: val, color: ptColor };
+              }
+              return { time: v.time };
+            });
+            
+            rsiLine.setData(rsiColoredData as any);
+            seriesMapRef.current.set(ind.id, rsiLine);
+
+          } else {
+            // Non-RSI indicators (SMA on RSI, etc.)
+            const line = extraChart.addLineSeries({
+              color: ind.color,
+              lineWidth: ind.config.lineWidth !== undefined ? ind.config.lineWidth : (isMA ? 1 : 2),
+              lineStyle: ind.config.lineStyle !== undefined ? ind.config.lineStyle : 0,
+              visible: ind.config.visible !== false
+            });
+            line.setData(ind.values as any);
+            seriesMapRef.current.set(ind.id, line);
           }
-          line.setData(ind.values as any);
-          seriesMapRef.current.set(ind.id, line);
         });
       });
 
@@ -299,7 +388,9 @@ export function StockChart({ data, markers = [], indicators = [], height = 500, 
             const newVals: Record<string, string> = {};
             indicators.forEach(ind => {
               const pt = ind.values.find(v => v.time === param.time);
-              if (pt) newVals[ind.id] = pt.value.toFixed(2);
+              if (pt && pt.value !== undefined && pt.value !== null && !isNaN(pt.value as any)) {
+                 newVals[ind.id] = Number(pt.value).toFixed(2);
+              }
             });
             setIndicatorValues(newVals);
           } else {

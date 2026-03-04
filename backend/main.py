@@ -4,8 +4,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from core.database.base import Base
-from core.database.session import engine
+from core.database.session import engine, redis_client
 from api.router import api_router
+from api.websockets.market import router as ws_market_router
+from services.fmp_ws_client import FMPWebSocketClient
+import asyncio
 
 
 @asynccontextmanager
@@ -13,8 +16,15 @@ async def lifespan(app: FastAPI):
     """Создаём таблицы при запуске (dev-режим). В проде — только Alembic миграции."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        
+    # Запуск фонового клиента FMP WebSocket
+    fmp_client = FMPWebSocketClient(redis_client)
+    fmp_task = asyncio.create_task(fmp_client.connect_and_listen())
+    
     yield
-    # Закрываем движок при остановке
+    # Отмена фоновых задач и закрытие соединений
+    fmp_task.cancel()
+    await redis_client.close()
     await engine.dispose()
 
 
@@ -36,6 +46,7 @@ app.add_middleware(
 
 # Подключаем все роутеры
 app.include_router(api_router, prefix="/api/v1")
+app.include_router(ws_market_router, prefix="/api/v1")
 
 
 @app.get("/health", tags=["Health"])

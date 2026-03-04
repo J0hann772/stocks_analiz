@@ -24,3 +24,11 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             yield session
         finally:
             await session.close()
+
+from redis.asyncio import Redis
+
+# Глобальный Redis клиент для FastAPI
+redis_client = Redis.from_url(settings.REDIS_URL, decode_responses=False)
+
+async def get_redis() -> Redis:
+    return redis_client

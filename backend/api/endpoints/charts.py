@@ -38,7 +38,8 @@ async def get_chart_data(
 
     # Формат lightweight-charts: { time, open, high, low, close, volume }
     result = []
-    for c in candles[-limit:]:
+    # FMP возвращает данные от новых к старым. Берем [:limit] чтобы получить самые свежие
+    for c in candles[:limit]:
         date_str = c.get("date", "")
         # Для дневок оставляем YYYY-MM-DD (строка).
         # Для интрадей данных конвертируем в unix timestamp (число секунд).

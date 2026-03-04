@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { chartsApi } from '@/lib/api';
@@ -12,14 +12,21 @@ import { calculateSMA, calculateEMA, calculateRSI } from '@/utils/indicators';
 import type { Timeframe } from '@/types';
 import styles from './page.module.css';
 
+import { useMarketWebsocket } from '@/hooks/useMarketWebsocket';
+
 export default function ChartPage() {
   const params = useParams<{ symbol: string }>();
   const router = useRouter();
-  const [symbol, setSymbol] = useState(params.symbol.toUpperCase());
+  const rawSymbol = Array.isArray(params.symbol) ? params.symbol[0] : params.symbol;
+  const [symbol, setSymbol] = useState((rawSymbol || 'AAPL').toUpperCase());
   const [timeframe, setTimeframe] = useState<Timeframe>('1day');
   const [activeIndicators, setActiveIndicators] = useState<IndicatorConfig[]>([]);
   const [selectedIndicator, setSelectedIndicator] = useState<IndicatorConfig | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // Подключаемся к WebSocket для получения живых тиков
+  const { ticks } = useMarketWebsocket([symbol]);
+  const currentTick = ticks[symbol];
 
   const { data = [], isLoading, error } = useQuery({
     queryKey: ['chart', symbol, timeframe],
@@ -34,8 +41,126 @@ export default function ChartPage() {
       });
     },
     enabled: !!symbol,
-    refetchInterval: 5000, // Живое обновление каждые 5 сек, склейка теперь на бэкенде
+    refetchInterval: false, // Отключаем polling, теперь WebSockets!
   });
+
+  const [liveData, setLiveData] = useState<any[]>([]);
+
+  // Инициализация при получении исторических данных
+  useEffect(() => {
+    if (data && data.length > 0) {
+      setLiveData(data as any[]);
+    }
+  }, [data]);
+
+  // Утилита для получения длительности таймфрейма в миллисекундах
+  const getIntervalMs = (tf: Timeframe) => {
+    switch (tf) {
+      case '1min': return 60 * 1000;
+      case '5min': return 5 * 60 * 1000;
+      case '15min': return 15 * 60 * 1000;
+      case '30min': return 30 * 60 * 1000;
+      case '1hour': return 60 * 60 * 1000;
+      case '4hour': return 4 * 60 * 60 * 1000;
+      case '1day': return 24 * 60 * 60 * 1000;
+      default: return 60 * 1000; // по умолчанию 1 минута
+    }
+  };
+
+  // Обработка живых тиков с троттлингом (ограничение до ~4 кадров в сек)
+  const lastTickTime = useRef<number>(0);
+  useEffect(() => {
+    if (currentTick && liveData.length > 0) {
+      const now = Date.now();
+      if (now - lastTickTime.current > 250) {
+        lastTickTime.current = now;
+        
+        setLiveData(prev => {
+          const newData = [...prev];
+          const last = { ...newData[newData.length - 1] };
+          
+          const tickTimeMs = currentTick.t;
+          const intervalMs = getIntervalMs(timeframe);
+          
+          // Для Lightweight Charts время в секундах
+          // Округляем входящий тик до начала текущего интервала (свечи)
+          const currentCandleStartTime = Math.floor(tickTimeMs / intervalMs) * intervalMs / 1000;
+          // Но LightweightCharts может менять часовой пояс, MSK_OFFSET мы добавляли выше (3 часа).
+          // Однако FMP отдает историю тоже с определенным смещением.
+          // Проще всего проверить `last.time`.
+          
+          let lastTimeSec = 0;
+          if (typeof last.time === 'number') {
+             lastTimeSec = last.time;
+          } else if (typeof last.time === 'string') {
+             // 'YYYY-MM-DD'
+             // Для '1day' мы можем просто считать, что один день это всегда одна свеча.
+             // У FMP для дня история обычно обрывается "сегодняшним днем". 
+             const ms = new Date(last.time).getTime();
+             lastTimeSec = Math.floor(ms / 1000);
+          }
+          
+          // Проверка: относится ли текущий тик к той же свече?
+          // Так как исторические данные уже сдвинуты на MSK_OFFSET (3 * 3600), 
+          // свечи в базе выровнены по другому.
+          // Чтобы не заморачиваться со сложной математикой часовых поясов,
+          // просто проверяем: если tickTime (в сек) > last.time + intervalSec, то создаем новую свечу.
+          const intervalSec = intervalMs / 1000;
+          
+          // Если это '1day', там дата строка, лучше опираться на это:
+          if (timeframe === '1day') {
+            const todayStr = new Date(tickTimeMs).toISOString().split('T')[0];
+            if (last.time !== todayStr) {
+               // Новая дневная свеча
+               newData.push({
+                 time: todayStr,
+                 open: currentTick.p,
+                 high: currentTick.p,
+                 low: currentTick.p,
+                 close: currentTick.p,
+                 volume: currentTick.v || 0
+               });
+            } else {
+               last.close = currentTick.p;
+               if (currentTick.p > last.high) last.high = currentTick.p;
+               if (currentTick.p < last.low) last.low = currentTick.p;
+               if (currentTick.v) last.volume = currentTick.v; // FMP v - кумулятивный объем за день
+               newData[newData.length - 1] = last;
+            }
+          } else {
+            // Внутридневные таймфреймы. Свечи из базы имеют time в секундах c MSK_OFFSET
+            // Мы должны округлить текущее время по отрезкам `intervalSec`
+            const mskOffsetSec = 3 * 3600;
+            // Убираем смещение MSK для правильного округления "минуты" в UTC
+            const tickTimeUTC = (tickTimeMs / 1000); 
+            const candleStartUTC = Math.floor(tickTimeUTC / intervalSec) * intervalSec;
+            const expectedTimeWithOffset = candleStartUTC + mskOffsetSec;
+
+            if (expectedTimeWithOffset > last.time) {
+              // Новая свеча
+              newData.push({
+                time: expectedTimeWithOffset,
+                open: currentTick.p,
+                high: currentTick.p,
+                low: currentTick.p,
+                close: currentTick.p,
+                volume: currentTick.v || 0
+              });
+            } else {
+              // Обновляем текущую (последнюю) свечу
+              last.close = currentTick.p;
+              if (currentTick.p > last.high) last.high = currentTick.p;
+              if (currentTick.p < last.low) last.low = currentTick.p;
+              if (currentTick.v) last.volume = currentTick.v;
+              newData[newData.length - 1] = last;
+            }
+          }
+
+          return newData;
+        });
+      }
+    }
+  }, [currentTick, timeframe]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleSymbolChange(newSymbol: string) {
     setSymbol(newSymbol);
@@ -57,87 +182,74 @@ export default function ChartPage() {
     );
   }
 
-  // 1. First Pass: Calculate Base Indicators (source = 'close', 'open', 'high', 'low')
-  const baseIndicators: any[] = [];
-  const dependentIndicators: any[] = [];
+  const indicatorLines = useMemo(() => {
+    // 1. First Pass: Calculate Base Indicators (source = 'close', 'open', 'high', 'low')
+    const baseIndicators: any[] = [];
+    const dependentIndicators: any[] = [];
 
-  activeIndicators.forEach((conf: IndicatorConfig) => {
-    if (['close', 'open', 'high', 'low'].includes((conf.source || 'close').toLowerCase())) {
-      baseIndicators.push(conf);
-    } else {
-      dependentIndicators.push(conf);
-    }
-  });
-
-  const computedLines: any[] = [];
-  const linesMap = new Map<string, { time: string, value: number }[]>();
-
-  // Use raw OHLCV as source arrays
-  const sourceArrays: Record<string, any[]> = {
-    close: (data as any[]).map((d: any) => ({ time: d.time, value: d.close })),
-    open: (data as any[]).map((d: any) => ({ time: d.time, value: d.open })),
-    high: (data as any[]).map((d: any) => ({ time: d.time, value: d.high })),
-    low: (data as any[]).map((d: any) => ({ time: d.time, value: d.low })),
-  };
-
-  // Helper to process one config
-  function processIndicator(conf: IndicatorConfig, sourceData: any[]) {
-    let vals: any[] = [];
-    if (conf.type === 'SMA') vals = calculateSMA(sourceData, conf.period);
-    if (conf.type === 'EMA') vals = calculateEMA(sourceData, conf.period);
-    if (conf.type === 'RSI') vals = calculateRSI(sourceData, conf.period);
-
-    linesMap.set(conf.id, vals);
-
-    // Add to render array regardless of visibility so inline UI can map it
-    computedLines.push({
-      key: conf.id,
-      id: conf.id, // Keep raw id for StockChart internal tracking
-      config: conf, // Pass config for inline menus
-      color: conf.color,
-      pane: conf.pane || 0,
-      values: vals
-    });
-
-    // Default TradingView style RSI smoothing line if RSI is added
-    if (conf.type === 'RSI' && vals.length > 14) {
-      const rsiMA = calculateSMA(vals, 14); // 14-period SMA of RSI
-      computedLines.push({
-        key: `${conf.id}_MA`,
-        id: `${conf.id}_MA`,
-        config: { ...conf, type: 'MA', id: `${conf.id}_MA` }, // Pseudo config for the MA
-        color: '#FFD700', // Gold/Yellow for smoothing
-        pane: conf.pane || 0,
-        values: rsiMA
-      });
-    }
-  }
-
-  // Calculate Base
-  baseIndicators.forEach(conf => {
-    const src = (conf.source || 'close').toLowerCase();
-    processIndicator(conf, sourceArrays[src] || sourceArrays.close);
-  });
-
-  // Calculate Dependent (Indicators on Indicators)
-  // Max 2 passes (e.g. SMA of RSI of Close)
-  let pending = [...dependentIndicators];
-  let maxIters = 5;
-  while (pending.length > 0 && maxIters > 0) {
-    const nextPending: any[] = [];
-    pending.forEach(conf => {
-      const srcData = linesMap.get(conf.source as string);
-      if (srcData) {
-        processIndicator(conf, srcData);
+    activeIndicators.forEach((conf: IndicatorConfig) => {
+      if (['close', 'open', 'high', 'low'].includes((conf.source || 'close').toLowerCase())) {
+        baseIndicators.push(conf);
       } else {
-        nextPending.push(conf); // source not ready yet, keep waiting
+        dependentIndicators.push(conf);
       }
     });
-    pending = nextPending;
-    maxIters--;
-  }
 
-  const indicatorLines = computedLines;
+    const computedLines: any[] = [];
+    const linesMap = new Map<string, { time: string, value: number }[]>();
+
+    // Use raw OHLCV as source arrays
+    const sourceArrays: Record<string, any[]> = {
+      close: liveData.map((d: any) => ({ time: d.time, value: d.close })),
+      open: liveData.map((d: any) => ({ time: d.time, value: d.open })),
+      high: liveData.map((d: any) => ({ time: d.time, value: d.high })),
+      low: liveData.map((d: any) => ({ time: d.time, value: d.low })),
+    };
+
+    // Helper to process one config
+    function processIndicator(conf: IndicatorConfig, sourceData: any[]) {
+      let vals: any[] = [];
+      if (conf.type === 'SMA') vals = calculateSMA(sourceData, conf.period);
+      if (conf.type === 'EMA') vals = calculateEMA(sourceData, conf.period);
+      if (conf.type === 'RSI') vals = calculateRSI(sourceData, conf.period);
+
+      linesMap.set(conf.id, vals);
+
+      computedLines.push({
+        key: conf.id,
+        id: conf.id,
+        config: conf,
+        color: conf.color,
+        pane: conf.pane || 0,
+        values: vals
+      });
+
+      // Yellow RSI MA line removed per user request
+    }
+
+    baseIndicators.forEach(conf => {
+      const src = (conf.source || 'close').toLowerCase();
+      processIndicator(conf, sourceArrays[src] || sourceArrays.close);
+    });
+
+    let pending = [...dependentIndicators];
+    let maxIters = 5;
+    while (pending.length > 0 && maxIters > 0) {
+      const nextPending: any[] = [];
+      pending.forEach(conf => {
+        const srcData = linesMap.get(conf.source as string);
+        if (srcData) {
+          processIndicator(conf, srcData);
+        } else {
+          nextPending.push(conf);
+        }
+      });
+      pending = nextPending;
+      maxIters--;
+    }
+
+    return computedLines;
+  }, [liveData, activeIndicators]);
 
   return (
     <div className={`${styles.page} ${isFullscreen ? styles.fullscreen : ''}`}>
@@ -164,9 +276,9 @@ export default function ChartPage() {
             Ошибка загрузки: {(error as any).message}
           </div>
         )}
-        {!isLoading && !error && data.length > 0 && (
+        {!isLoading && !error && liveData.length > 0 && (
           <StockChart
-            data={data as any}
+            data={liveData as any}
             indicators={indicatorLines}
             height={560} // This is now minHeight/fallback
             showVolume
@@ -186,9 +298,9 @@ export default function ChartPage() {
       />
 
       {/* Price info bar */}
-      {data.length > 0 && (() => {
-        const last = (data as any[])[data.length - 1];
-        const prev = (data as any[])[data.length - 2];
+      {liveData.length > 0 && (() => {
+        const last = liveData[liveData.length - 1];
+        const prev = liveData[liveData.length - 2];
         const change = prev ? ((last.close - prev.close) / prev.close * 100) : 0;
         const isUp = change >= 0;
         return (

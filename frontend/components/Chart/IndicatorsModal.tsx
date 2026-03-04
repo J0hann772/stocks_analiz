@@ -9,6 +9,11 @@ export interface IndicatorConfig {
   pane?: number; // 0 = main, 1 = pane 1 (bottom), 2 = pane 2 (bottom)
   source?: string; // 'close', 'open', 'high', 'low', or another indicator's ID
   visible?: boolean;
+  lineWidth?: number;
+  lineStyle?: number;
+  offset?: number;
+  upperBound?: number; // Top bound for RSI (e.g., 70)
+  lowerBound?: number; // Bottom bound for RSI (e.g., 30)
 }
 
 interface Props {
@@ -31,10 +36,14 @@ export function IndicatorsModal({ isOpen, onClose, onAdd }: Props) {
     let defaultColor = '#f0b429';
     let defaultPeriod = 14;
     let defaultPane = 0;
+    let defaultUpper = undefined;
+    let defaultLower = undefined;
 
     if (type === 'RSI') {
       defaultColor = '#7e57c2';
       defaultPane = 1; // Try to put RSI on bottom by default
+      defaultUpper = 70;
+      defaultLower = 30;
     } else if (type === 'EMA') {
       defaultColor = '#29b6f6';
       defaultPeriod = 20;
@@ -43,7 +52,7 @@ export function IndicatorsModal({ isOpen, onClose, onAdd }: Props) {
       defaultPeriod = 20;
     }
 
-    onAdd({ type, period: defaultPeriod, color: defaultColor, pane: defaultPane, source: 'close', visible: true });
+    onAdd({ type, period: defaultPeriod, color: defaultColor, pane: defaultPane, source: 'close', visible: true, upperBound: defaultUpper, lowerBound: defaultLower });
     onClose();
   }
 
