@@ -178,7 +178,13 @@ export function StockChart({ data, markers = [], indicators = [], height = 500, 
           lineStyle: ind.config.lineStyle !== undefined ? ind.config.lineStyle : 0,
           visible: ind.config.visible !== false
         });
-        line.setData(ind.values as any);
+        const cleanData = ind.values.map(v => {
+          if ('value' in v && v.value !== undefined && v.value !== null && !isNaN(v.value as number)) {
+            return { time: v.time, value: Number(v.value) };
+          }
+          return { time: v.time };
+        });
+        line.setData(cleanData as any);
         seriesMapRef.current.set(ind.id, line);
       });
 
@@ -316,7 +322,13 @@ export function StockChart({ data, markers = [], indicators = [], height = 500, 
               lineStyle: ind.config.lineStyle !== undefined ? ind.config.lineStyle : 0,
               visible: ind.config.visible !== false
             });
-            line.setData(ind.values as any);
+            const cleanData = ind.values.map(v => {
+              if ('value' in v && v.value !== undefined && v.value !== null && !isNaN(v.value as number)) {
+                return { time: v.time, value: Number(v.value) };
+              }
+              return { time: v.time };
+            });
+            line.setData(cleanData as any);
             seriesMapRef.current.set(ind.id, line);
           }
         });
@@ -385,9 +397,19 @@ export function StockChart({ data, markers = [], indicators = [], height = 500, 
           });
 
           if (param.time) {
+            let normalizedTime: string | number = param.time;
+            
+            // Handle BusinessDay object { year, month, day } from LightweightCharts
+            if (typeof param.time === 'object' && 'year' in param.time) {
+              const { year, month, day } = param.time;
+              const mm = String(month).padStart(2, '0');
+              const dd = String(day).padStart(2, '0');
+              normalizedTime = `${year}-${mm}-${dd}`;
+            }
+
             const newVals: Record<string, string> = {};
             indicators.forEach(ind => {
-              const pt = ind.values.find(v => v.time === param.time);
+              const pt = ind.values.find(v => v.time === normalizedTime);
               if (pt && pt.value !== undefined && pt.value !== null && !isNaN(pt.value as any)) {
                  newVals[ind.id] = Number(pt.value).toFixed(2);
               }
@@ -432,7 +454,30 @@ export function StockChart({ data, markers = [], indicators = [], height = 500, 
       indicators.forEach(ind => {
         const line = seriesMapRef.current.get(ind.id);
         if (line) {
-          line.setData(ind.values as any);
+          const cleanData = ind.values.map(v => {
+            if ('value' in v && v.value !== undefined && v.value !== null && !isNaN(v.value as number)) {
+              return { time: v.time, value: Number(v.value) };
+            }
+            return { time: v.time };
+          });
+          
+          if (ind.key.includes('RSI') && !ind.key.includes('_MA')) {
+             const upperBound = ind.config.upperBound !== undefined ? ind.config.upperBound : 70;
+             const lowerBound = ind.config.lowerBound !== undefined ? ind.config.lowerBound : 30;
+             const rsiColoredData = cleanData.map(v => {
+               if ('value' in v) {
+                 const val = (v as any).value;
+                 let ptColor = undefined;
+                 if (val > upperBound) ptColor = '#f85149';
+                 else if (val < lowerBound) ptColor = '#3fb950';
+                 return { time: v.time, value: val, color: ptColor };
+               }
+               return { time: v.time };
+             });
+             line.setData(rsiColoredData as any);
+          } else {
+             line.setData(cleanData as any);
+          }
           line.applyOptions({ visible: ind.config.visible !== false });
         }
       });

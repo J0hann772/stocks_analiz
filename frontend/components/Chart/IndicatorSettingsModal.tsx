@@ -24,6 +24,7 @@ export function IndicatorSettingsModal({ isOpen, onClose, indicator, allIndicato
   const [isVisible, setIsVisible] = useState(true);
   const [upperBound, setUpperBound] = useState(70);
   const [lowerBound, setLowerBound] = useState(30);
+  const [smoothing, setSmoothing] = useState(14);
 
   useEffect(() => {
     if (indicator) {
@@ -40,6 +41,9 @@ export function IndicatorSettingsModal({ isOpen, onClose, indicator, allIndicato
         setUpperBound(indicator.upperBound !== undefined ? indicator.upperBound : 70);
         setLowerBound(indicator.lowerBound !== undefined ? indicator.lowerBound : 30);
       }
+      if (indicator.type === 'ADX') {
+        setSmoothing(indicator.smoothing !== undefined ? indicator.smoothing : 14);
+      }
     }
   }, [indicator]);
 
@@ -54,6 +58,7 @@ export function IndicatorSettingsModal({ isOpen, onClose, indicator, allIndicato
       visible: isVisible,
       upperBound: indicator.type === 'RSI' ? upperBound : undefined,
       lowerBound: indicator.type === 'RSI' ? lowerBound : undefined,
+      smoothing: indicator.type === 'ADX' ? smoothing : undefined,
     });
     onClose();
   }
@@ -65,6 +70,8 @@ export function IndicatorSettingsModal({ isOpen, onClose, indicator, allIndicato
       setUpperBound(70); setLowerBound(30);
     } else if (indicator.type === 'EMA') {
       setPeriod(20); setColor('#29b6f6'); setSource('close'); setPane(0);
+    } else if (indicator.type === 'ADX') {
+      setPeriod(14); setSmoothing(14); setColor('#ef5350'); setSource('close'); setPane(2);
     } else {
       setPeriod(20); setColor('#f0b429'); setSource('close'); setPane(0);
     }
@@ -105,7 +112,7 @@ export function IndicatorSettingsModal({ isOpen, onClose, indicator, allIndicato
           {activeTab === 'arguments' && (
             <div className={styles.fields}>
               <div className={styles.field}>
-                <label className={styles.label}>Длина</label>
+                <label className={styles.label}>{indicator.type === 'ADX' ? 'DI Длина' : 'Длина'}</label>
                 <input
                   type="number"
                   className={styles.input}
@@ -115,11 +122,25 @@ export function IndicatorSettingsModal({ isOpen, onClose, indicator, allIndicato
                 />
               </div>
 
+              {indicator.type === 'ADX' && (
+                <div className={styles.field}>
+                  <label className={styles.label}>Сглаживание ADX</label>
+                  <input
+                    type="number"
+                    className={styles.input}
+                    value={smoothing}
+                    onChange={e => setSmoothing(parseInt(e.target.value) || 1)}
+                    min="1" max="500"
+                  />
+                </div>
+              )}
+
               <div className={styles.field}>
                 <label className={styles.label}>Данные</label>
                 <select
                   className={styles.select}
                   value={source}
+                  disabled={indicator.type === 'ADX'}
                   onChange={e => setSource(e.target.value)}
                 >
                   <option value="atr">ATR</option>

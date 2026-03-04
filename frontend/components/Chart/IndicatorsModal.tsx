@@ -3,7 +3,7 @@ import styles from './IndicatorsModal.module.css';
 
 export interface IndicatorConfig {
   id: string; // unique id
-  type: 'SMA' | 'EMA' | 'RSI';
+  type: 'SMA' | 'EMA' | 'RSI' | 'ADX';
   period: number;
   color: string;
   pane?: number; // 0 = main, 1 = pane 1 (bottom), 2 = pane 2 (bottom)
@@ -14,6 +14,7 @@ export interface IndicatorConfig {
   offset?: number;
   upperBound?: number; // Top bound for RSI (e.g., 70)
   lowerBound?: number; // Bottom bound for RSI (e.g., 30)
+  smoothing?: number; // ADX Smoothing length
 }
 
 interface Props {
@@ -25,13 +26,14 @@ interface Props {
 const INFO_TEXT = {
   SMA: "Простая скользящая средняя (SMA) рассчитывает среднюю цену за выбранный период. Она помогает сгладить ценовые колебания и определить общее направление тренда.",
   EMA: "Экспоненциальная скользящая средняя (EMA) аналогична SMA, но придает больший вес последним ценам. Она быстрее реагирует на резкие изменения курса.",
-  RSI: "Индекс относительной силы (RSI) — это осциллятор, который измеряет скорость и силу изменения цены. Значения выше 70 обычно говорят о перекупленности, а ниже 30 — о перепроданности."
+  RSI: "Индекс относительной силы (RSI) — это осциллятор, который измеряет скорость и силу изменения цены. Значения выше 70 обычно говорят о перекупленности, а ниже 30 — о перепроданности.",
+  ADX: "Средний направленный индекс (ADX) используется для измерения силы или слабости тренда, а не его направления."
 };
 
 export function IndicatorsModal({ isOpen, onClose, onAdd }: Props) {
   if (!isOpen) return null;
 
-  function handleSelect(type: 'SMA' | 'EMA' | 'RSI') {
+  function handleSelect(type: 'SMA' | 'EMA' | 'RSI' | 'ADX') {
     // Default configs for instantaneous addition
     let defaultColor = '#f0b429';
     let defaultPeriod = 14;
@@ -47,12 +49,16 @@ export function IndicatorsModal({ isOpen, onClose, onAdd }: Props) {
     } else if (type === 'EMA') {
       defaultColor = '#29b6f6';
       defaultPeriod = 20;
+    } else if (type === 'ADX') {
+      defaultColor = '#ef5350';
+      defaultPeriod = 14;
+      defaultPane = 2; // Usually placed in a separate pane from RSI
     } else {
       defaultColor = '#f0b429';
       defaultPeriod = 20;
     }
 
-    onAdd({ type, period: defaultPeriod, color: defaultColor, pane: defaultPane, source: 'close', visible: true, upperBound: defaultUpper, lowerBound: defaultLower });
+    onAdd({ type, period: defaultPeriod, color: defaultColor, pane: defaultPane, source: 'close', visible: true, upperBound: defaultUpper, lowerBound: defaultLower, smoothing: type === 'ADX' ? 14 : undefined });
     onClose();
   }
 
@@ -73,6 +79,9 @@ export function IndicatorsModal({ isOpen, onClose, onAdd }: Props) {
           </button>
           <button className={styles.listItemBtn} onClick={() => handleSelect('RSI')}>
             <span style={{ fontWeight: 600 }}>RSI</span> (Индекс относительной силы)
+          </button>
+          <button className={styles.listItemBtn} onClick={() => handleSelect('ADX')}>
+            <span style={{ fontWeight: 600 }}>ADX</span> (Средний направленный индекс)
           </button>
         </div>
       </div>

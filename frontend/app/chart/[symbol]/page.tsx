@@ -8,7 +8,7 @@ import { StockChart } from '@/components/Chart/StockChart';
 import { ChartToolbar } from '@/components/Chart/ChartToolbar';
 import { IndicatorConfig } from '@/components/Chart/IndicatorsModal';
 import { IndicatorSettingsModal } from '@/components/Chart/IndicatorSettingsModal';
-import { calculateSMA, calculateEMA, calculateRSI } from '@/utils/indicators';
+import { calculateSMA, calculateEMA, calculateRSI, calculateADX } from '@/utils/indicators';
 import type { Timeframe } from '@/types';
 import styles from './page.module.css';
 
@@ -212,6 +212,15 @@ export default function ChartPage() {
       if (conf.type === 'SMA') vals = calculateSMA(sourceData, conf.period);
       if (conf.type === 'EMA') vals = calculateEMA(sourceData, conf.period);
       if (conf.type === 'RSI') vals = calculateRSI(sourceData, conf.period);
+      if (conf.type === 'ADX') {
+        const ohclArgs = liveData.map((d: any) => ({
+          time: d.time,
+          high: d.high,
+          low: d.low,
+          close: d.close
+        }));
+        vals = calculateADX(ohclArgs, conf.period, conf.smoothing || 14);
+      }
 
       linesMap.set(conf.id, vals);
 

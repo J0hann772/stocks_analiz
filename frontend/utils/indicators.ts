@@ -142,3 +142,94 @@ export function calculateRSI(data: { value?: number, time: any }[], period: numb
   }
   return result;
 }
+
+export function calculateADX(data: { high?: number, low?: number, close?: number, time: any }[], period: number = 14, smoothing: number = 14) {
+  const result: { time: any; value?: number }[] = [];
+  
+  if (data.length <= period) {
+    return data.map(d => ({ time: d.time }));
+  }
+
+  // Calculate True Range (TR), +DM, -DM
+  const tr: number[] = new Array(data.length).fill(0);
+  const pDM: number[] = new Array(data.length).fill(0);
+  const nDM: number[] = new Array(data.length).fill(0);
+
+  for (let i = 1; i < data.length; i++) {
+    const high = data[i].high;
+    const low = data[i].low;
+    const prevHigh = data[i - 1].high;
+    const prevLow = data[i - 1].low;
+    const prevClose = data[i - 1].close;
+
+    if (high === undefined || low === undefined || prevHigh === undefined || prevLow === undefined || prevClose === undefined) {
+      continue;
+    }
+
+    const upMove = high - prevHigh;
+    const downMove = prevLow - low;
+
+    if (upMove > downMove && upMove > 0) pDM[i] = upMove;
+    if (downMove > upMove && downMove > 0) nDM[i] = downMove;
+
+    tr[i] = Math.max(
+      high - low,
+      Math.abs(high - prevClose),
+      Math.abs(low - prevClose)
+    );
+  }
+
+  // Wilder's Smoothing Function
+  const wilderSmooth = (arr: number[], length: number) => {
+    const smoothed = new Array(arr.length).fill(0);
+    let sum = 0;
+    for (let i = 1; i <= length; i++) {
+      if (i < arr.length) sum += arr[i];
+    }
+    smoothed[length] = sum;
+    for (let i = length + 1; i < arr.length; i++) {
+      smoothed[i] = smoothed[i - 1] - (smoothed[i - 1] / length) + arr[i];
+    }
+    return smoothed;
+  };
+
+  const smoothedTR = wilderSmooth(tr, period);
+  const smoothedPDM = wilderSmooth(pDM, period);
+  const smoothedNDM = wilderSmooth(nDM, period);
+
+  const dx: number[] = new Array(data.length).fill(0);
+  for (let i = period; i < data.length; i++) {
+    if (smoothedTR[i] === 0) continue;
+    const diPlus = (smoothedPDM[i] / smoothedTR[i]) * 100;
+    const diMinus = (smoothedNDM[i] / smoothedTR[i]) * 100;
+    const diff = Math.abs(diPlus - diMinus);
+    const sum = diPlus + diMinus;
+    dx[i] = sum === 0 ? 0 : (diff / sum) * 100;
+  }
+
+  // First ADX is average of DX
+  const adx: number[] = new Array(data.length).fill(0);
+  const firstAdxIndex = period + smoothing - 1;
+  
+  if (firstAdxIndex < data.length) {
+    let adxSum = 0;
+    for (let i = period; i < period + smoothing; i++) {
+        adxSum += dx[i];
+    }
+    adx[firstAdxIndex] = adxSum / smoothing;
+
+    for (let i = firstAdxIndex + 1; i < data.length; i++) {
+      adx[i] = (adx[i - 1] * (smoothing - 1) + dx[i]) / smoothing;
+    }
+  }
+
+  for (let i = 0; i < data.length; i++) {
+    if (i < firstAdxIndex) {
+      result.push({ time: data[i].time });
+    } else {
+      result.push({ time: data[i].time, value: adx[i] });
+    }
+  }
+
+  return result;
+}
