@@ -1,6 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { strategiesApi } from '@/lib/api';
 import type { Timeframe } from '@/types';
 import styles from './ChartToolbar.module.css';
 
@@ -24,7 +26,10 @@ interface Props {
   onRemoveIndicator: (id: string) => void;
   onSymbolChange?: (symbol: string) => void;
   onFullscreen?: () => void;
+  onLoadPreset: (inds: IndicatorConfig[]) => void;
 }
+
+const USER_ID = 1; // TODO: get from auth context
 
 export function ChartToolbar({
   symbol,
@@ -35,13 +40,77 @@ export function ChartToolbar({
   onRemoveIndicator,
   onSymbolChange,
   onFullscreen,
+  onLoadPreset,
 }: Props) {
   const [inputSymbol, setInputSymbol] = useState(symbol);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  
+  const [presetName, setPresetName] = useState('');
+  const [isPresetDropdownOpen, setIsPresetDropdownOpen] = useState(false);
+  const presetDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (presetDropdownRef.current && !presetDropdownRef.current.contains(e.target as Node)) {
+        setIsPresetDropdownOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+  const queryClient = useQueryClient();
+
+  // Fetch presets
+  const { data: strategies = [], isLoading: loadingStrategies } = useQuery({
+    queryKey: ['strategies', USER_ID],
+    queryFn: () => strategiesApi.list(USER_ID),
+  });
+
+  // Save preset mutation
+  const saveMutation = useMutation({
+    mutationFn: (name: string) => 
+      strategiesApi.create(USER_ID, {
+        name,
+        description: 'Saved Chart Preset',
+        indicators: { configs: activeIndicators }
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['strategies', USER_ID] });
+      setPresetName('');
+    },
+    onError: () => alert('Ошибка при сохранении пресета')
+  });
+
+  // Delete preset mutation
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => strategiesApi.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['strategies', USER_ID] });
+    },
+    onError: () => alert('Ошибка при удалении пресета')
+  });
 
   function handleSymbolSubmit(e: React.FormEvent) {
     e.preventDefault();
     onSymbolChange?.(inputSymbol.toUpperCase());
+  }
+
+  function handleSavePreset() {
+    if (!presetName.trim()) {
+      alert('Введите название пресета');
+      return;
+    }
+    saveMutation.mutate(presetName);
+  }
+
+  function handleLoadPreset(strategyId: number) {
+    if (!strategyId) return;
+    
+    const strategy = strategies.find(s => s.id === strategyId);
+    if (strategy && strategy.indicators && strategy.indicators.configs) {
+      onLoadPreset(strategy.indicators.configs);
+    }
+    setIsPresetDropdownOpen(false);
   }
 
   return (
@@ -83,6 +152,64 @@ export function ChartToolbar({
         >
           + Индикаторы
         </button>
+      </div>
+
+      <div className={styles.divider} />
+
+      {/* Presets */}
+      <div className={styles.presetGroup}>
+        <input 
+          className={styles.presetInput}
+          placeholder="Имя пресета"
+          value={presetName}
+          onChange={e => setPresetName(e.target.value)}
+        />
+        <button 
+          className={styles.presetBtn}
+          onClick={handleSavePreset}
+          disabled={saveMutation.isPending || loadingStrategies}
+        >
+          {saveMutation.isPending ? '...' : 'Сохранить пресет'}
+        </button>
+        <div className={styles.presetDropdown} ref={presetDropdownRef}>
+          <button
+            className={styles.presetSelect}
+            onClick={() => setIsPresetDropdownOpen(prev => !prev)}
+            disabled={loadingStrategies}
+          >
+            Загрузить пресет...
+            <span className={styles.presetChevron}>&#9660;</span>
+          </button>
+          {isPresetDropdownOpen && strategies.length > 0 && (
+            <div className={styles.presetMenu}>
+              {strategies.map(s => (
+                <div key={s.id} className={styles.presetMenuItem}>
+                  <button
+                    className={styles.presetMenuBtn}
+                    onClick={() => handleLoadPreset(s.id)}
+                  >
+                    {s.name}
+                  </button>
+                  <button
+                    className={styles.presetDeleteBtn}
+                    title="Удалить пресет"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (confirm(`Удалить пресет "${s.name}"?`)) {
+                        deleteMutation.mutate(s.id);
+                      }
+                    }}
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>
+                      <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                    </svg>
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       <IndicatorsModal 

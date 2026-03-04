@@ -113,3 +113,138 @@
   color: var(--color-danger);
   background: color-mix(in srgb, var(--color-danger) 15%, transparent);
 }
+
+/* Presets */
+.presetGroup {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.presetInput {
+  width: 120px;
+  padding: 5px 10px;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.presetInput:focus {
+  border-color: var(--color-primary);
+}
+
+.presetBtn {
+  padding: 5px 12px;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.presetBtn:hover {
+  background: var(--color-primary);
+  color: #fff;
+  border-color: var(--color-primary);
+}
+
+.presetDropdown {
+  position: relative;
+}
+
+.presetSelect {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  font-size: 13px;
+  outline: none;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.presetSelect:hover {
+  border-color: var(--color-primary);
+}
+
+.presetChevron {
+  font-size: 8px;
+  opacity: 0.6;
+}
+
+.presetMenu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 100%;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  z-index: 100;
+  overflow: hidden;
+  animation: presetMenuIn 0.12s ease-out;
+}
+
+@keyframes presetMenuIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.presetMenuItem {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  width: 100%;
+  background: transparent;
+  transition: background 0.1s;
+  white-space: nowrap;
+}
+
+.presetMenuItem:hover {
+  background: var(--color-surface-2);
+}
+
+.presetMenuBtn {
+  flex: 1;
+  padding: 8px 14px;
+  background: transparent;
+  border: none;
+  color: var(--color-text);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.presetMenuBtn:hover {
+  color: var(--color-primary);
+}
+
+.presetDeleteBtn {
+  padding: 6px 10px;
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: all 0.15s;
+}
+
+.presetMenuItem:hover .presetDeleteBtn {
+  opacity: 1;
+}
+
+.presetDeleteBtn:hover {
+  color: #f85149;
+}

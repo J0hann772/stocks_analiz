@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { chartsApi } from '@/lib/api';
@@ -8,7 +8,11 @@ import { StockChart } from '@/components/Chart/StockChart';
 import { ChartToolbar } from '@/components/Chart/ChartToolbar';
 import { IndicatorConfig } from '@/components/Chart/IndicatorsModal';
 import { IndicatorSettingsModal } from '@/components/Chart/IndicatorSettingsModal';
-import { calculateSMA, calculateEMA, calculateRSI, calculateADX } from '@/utils/indicators';
+import { DrawingToolbar } from '@/components/Chart/DrawingToolbar';
+import { DrawingCanvas } from '@/components/Chart/DrawingCanvas';
+import type { DrawingToolType, DrawnObject } from '@/components/Chart/DrawingTools.types';
+import type { IChartApi, ISeriesApi } from 'lightweight-charts';
+import { calculateSMA, calculateEMA, calculateRSI, calculateADX, calculateHHLL, calculateATR } from '@/utils/indicators';
 import type { Timeframe } from '@/types';
 import styles from './page.module.css';
 
@@ -23,6 +27,38 @@ export default function ChartPage() {
   const [activeIndicators, setActiveIndicators] = useState<IndicatorConfig[]>([]);
   const [selectedIndicator, setSelectedIndicator] = useState<IndicatorConfig | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // Drawing tools state
+  const [activeTool, setActiveTool] = useState<DrawingToolType>('cursor');
+  const [drawings, setDrawings] = useState<DrawnObject[]>([]);
+  const chartApiRef = useRef<IChartApi | null>(null);
+  const seriesApiRef = useRef<ISeriesApi<any> | null>(null);
+  const chartContainerRef = useRef<HTMLDivElement | null>(null);
+
+  const handleChartReady = useCallback((chart: IChartApi, series: ISeriesApi<any>) => {
+    chartApiRef.current = chart;
+    seriesApiRef.current = series;
+  }, []);
+
+  const handleAddDrawing = useCallback((drawing: DrawnObject) => {
+    setDrawings(prev => [...prev, drawing]);
+  }, []);
+
+  const handleToolComplete = useCallback(() => {
+    setActiveTool('cursor');
+  }, []);
+
+  const handleClearDrawings = useCallback(() => {
+    setDrawings([]);
+  }, []);
+
+  const handleRemoveDrawing = useCallback((id: string) => {
+    setDrawings(prev => prev.filter(d => d.id !== id));
+  }, []);
+
+  const handleUpdateDrawing = useCallback((updated: DrawnObject) => {
+    setDrawings(prev => prev.map(d => d.id === updated.id ? updated : d));
+  }, []);
 
   // Подключаемся к WebSocket для получения живых тиков
   const { ticks } = useMarketWebsocket([symbol]);
@@ -209,6 +245,8 @@ export default function ChartPage() {
     // Helper to process one config
     function processIndicator(conf: IndicatorConfig, sourceData: any[]) {
       let vals: any[] = [];
+      let extraVals: any[] | undefined = undefined;
+
       if (conf.type === 'SMA') vals = calculateSMA(sourceData, conf.period);
       if (conf.type === 'EMA') vals = calculateEMA(sourceData, conf.period);
       if (conf.type === 'RSI') vals = calculateRSI(sourceData, conf.period);
@@ -221,6 +259,26 @@ export default function ChartPage() {
         }));
         vals = calculateADX(ohclArgs, conf.period, conf.smoothing || 14);
       }
+      if (conf.type === 'HHLL') {
+        const ohclArgs = liveData.map((d: any) => ({
+          time: d.time,
+          high: d.high,
+          low: d.low,
+          close: d.close
+        }));
+        const hhll = calculateHHLL(ohclArgs, conf.topPeriod || 20, conf.botPeriod || 20, conf.topSrc || 'high', conf.botSrc || 'low');
+        vals = hhll.top;
+        extraVals = hhll.bot;
+      }
+      if (conf.type === 'ATR') {
+        const ohclArgs = liveData.map((d: any) => ({
+          time: d.time,
+          high: d.high,
+          low: d.low,
+          close: d.close
+        }));
+        vals = calculateATR(ohclArgs, conf.period || 14, conf.smoothingType || 'RMA');
+      }
 
       linesMap.set(conf.id, vals);
 
@@ -230,7 +288,8 @@ export default function ChartPage() {
         config: conf,
         color: conf.color,
         pane: conf.pane || 0,
-        values: vals
+        values: vals,
+        extraValues: extraVals,
       });
 
       // Yellow RSI MA line removed per user request
@@ -271,31 +330,54 @@ export default function ChartPage() {
         onRemoveIndicator={handleRemoveIndicator}
         onSymbolChange={handleSymbolChange}
         onFullscreen={() => setIsFullscreen((f: boolean) => !f)}
+        onLoadPreset={(inds) => setActiveIndicators(inds)}
       />
 
-      <div className={styles.chartWrap}>
-        {isLoading && (
-          <div className={styles.loading}>
-            <span className="spinner" />
-            <span>Загрузка {symbol}...</span>
-          </div>
-        )}
-        {error && (
-          <div className={styles.error}>
-            Ошибка загрузки: {(error as any).message}
-          </div>
-        )}
-        {!isLoading && !error && liveData.length > 0 && (
-          <StockChart
-            data={liveData as any}
-            indicators={indicatorLines}
-            height={560} // This is now minHeight/fallback
-            showVolume
-            onRemoveIndicator={handleRemoveIndicator}
-            onUpdateIndicator={handleUpdateIndicator}
-            onSettingsClick={setSelectedIndicator}
-          />
-        )}
+      <div className={styles.chartArea}>
+        <DrawingToolbar
+          activeTool={activeTool}
+          onToolChange={setActiveTool}
+          onClearAll={handleClearDrawings}
+        />
+        <div className={styles.chartWrap} ref={chartContainerRef}>
+          {isLoading && (
+            <div className={styles.loading}>
+              <span className="spinner" />
+              <span>Загрузка {symbol}...</span>
+            </div>
+          )}
+          {error && (
+            <div className={styles.error}>
+              Ошибка загрузки: {(error as any).message}
+            </div>
+          )}
+          {!isLoading && !error && liveData.length > 0 && (
+            <>
+              <StockChart
+                data={liveData as any}
+                indicators={indicatorLines}
+                height={560}
+                showVolume
+                onRemoveIndicator={handleRemoveIndicator}
+                onUpdateIndicator={handleUpdateIndicator}
+                onSettingsClick={setSelectedIndicator}
+                onChartReady={handleChartReady}
+              />
+              <DrawingCanvas
+                chartApi={chartApiRef.current}
+                seriesApi={seriesApiRef.current}
+                activeTool={activeTool}
+                drawings={drawings}
+                onAddDrawing={handleAddDrawing}
+                onRemoveDrawing={handleRemoveDrawing}
+                onUpdateDrawing={handleUpdateDrawing}
+                onToolComplete={handleToolComplete}
+                containerRef={chartContainerRef}
+                data={liveData as any}
+              />
+            </>
+          )}
+        </div>
       </div>
 
       <IndicatorSettingsModal

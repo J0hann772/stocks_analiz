@@ -19,6 +19,7 @@ export interface StockIndicator {
   config: any; // The raw config object
   color: string;
   values: { time: string; value: number }[];
+  extraValues?: { time: string; value: number }[]; // For bottom band of HHLL
   pane?: number;
 }
 
@@ -31,6 +32,7 @@ interface Props {
   onUpdateIndicator?: (config: any) => void;
   onRemoveIndicator?: (id: string) => void;
   onSettingsClick?: (config: any) => void;
+  onChartReady?: (chartApi: IChartApi, seriesApi: ISeriesApi<any>) => void;
 }
 
 const DARK_OPTS = {
@@ -55,7 +57,7 @@ const EyeOffIcon = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="n
 const GearIcon = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>;
 const TrashIcon = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>;
 
-export function StockChart({ data, markers = [], indicators = [], height = 500, showVolume = true, onUpdateIndicator, onRemoveIndicator, onSettingsClick }: Props) {
+export function StockChart({ data, markers = [], indicators = [], height = 500, showVolume = true, onUpdateIndicator, onRemoveIndicator, onSettingsClick, onChartReady }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mainChartContainerRef = useRef<HTMLDivElement>(null);
   const extraContainersRef = useRef<(HTMLDivElement | null)[]>([]);
@@ -145,6 +147,9 @@ export function StockChart({ data, markers = [], indicators = [], height = 500, 
       });
       charts.push(mainChart);
 
+      // Expose chart API to parent for drawing tools (will be called after candle series is created)
+      // We defer the call to after the candle series is added below
+
       const candle = mainChart.addCandlestickSeries({
         upColor: '#3fb950',
         downColor: '#f85149',
@@ -156,6 +161,9 @@ export function StockChart({ data, markers = [], indicators = [], height = 500, 
       candle.setData(data as any);
       if (markers.length) candle.setMarkers(markers as any);
       mainCandleRef.current = candle;
+
+      // Notify parent about chart readiness (for drawing tools)
+      if (onChartReady) onChartReady(mainChart, candle);
 
       if (showVolume) {
         const vol = mainChart.addHistogramSeries({
@@ -172,11 +180,17 @@ export function StockChart({ data, markers = [], indicators = [], height = 500, 
       }
 
       renderMainIndicators.forEach(ind => {
+        // Main pane indicators: share the right price scale with candles
+        // but do NOT affect auto-scale range (candles drive the scaling)
         const line = mainChart.addLineSeries({ 
           color: ind.color, 
           lineWidth: ind.config.lineWidth !== undefined ? ind.config.lineWidth : 2,
           lineStyle: ind.config.lineStyle !== undefined ? ind.config.lineStyle : 0,
-          visible: ind.config.visible !== false
+          visible: ind.config.visible !== false,
+          // No priceScaleId — stays on default right scale with candles
+          autoscaleInfoProvider: () => ({
+            priceRange: null, // Don't affect auto-scale range
+          }),
         });
         const cleanData = ind.values.map(v => {
           if ('value' in v && v.value !== undefined && v.value !== null && !isNaN(v.value as number)) {
@@ -186,6 +200,26 @@ export function StockChart({ data, markers = [], indicators = [], height = 500, 
         });
         line.setData(cleanData as any);
         seriesMapRef.current.set(ind.id, line);
+
+        if (ind.extraValues) {
+          const line2 = mainChart.addLineSeries({ 
+            color: ind.config.botColor || '#f85149', 
+            lineWidth: ind.config.lineWidth !== undefined ? ind.config.lineWidth : 2,
+            lineStyle: ind.config.lineStyle !== undefined ? ind.config.lineStyle : 0,
+            visible: ind.config.visible !== false,
+            autoscaleInfoProvider: () => ({
+              priceRange: null,
+            }),
+          });
+          const cleanData2 = ind.extraValues.map(v => {
+            if ('value' in v && v.value !== undefined && v.value !== null && !isNaN(v.value as number)) {
+              return { time: v.time, value: Number(v.value) };
+            }
+            return { time: v.time };
+          });
+          line2.setData(cleanData2 as any);
+          seriesMapRef.current.set(ind.id + '_extra', line2);
+        }
       });
 
       renderExtraPaneKeysArr.forEach((paneKey, idx) => {
@@ -315,7 +349,7 @@ export function StockChart({ data, markers = [], indicators = [], height = 500, 
             seriesMapRef.current.set(ind.id, rsiLine);
 
           } else {
-            // Non-RSI indicators (SMA on RSI, etc.)
+            // Non-RSI indicators (SMA on RSI, HHLL, etc.)
             const line = extraChart.addLineSeries({
               color: ind.color,
               lineWidth: ind.config.lineWidth !== undefined ? ind.config.lineWidth : (isMA ? 1 : 2),
@@ -330,6 +364,23 @@ export function StockChart({ data, markers = [], indicators = [], height = 500, 
             });
             line.setData(cleanData as any);
             seriesMapRef.current.set(ind.id, line);
+
+            if (ind.extraValues) {
+              const line2 = extraChart.addLineSeries({ 
+                color: '#f85149', 
+                lineWidth: ind.config.lineWidth !== undefined ? ind.config.lineWidth : 2,
+                lineStyle: ind.config.lineStyle !== undefined ? ind.config.lineStyle : 0,
+                visible: ind.config.visible !== false
+              });
+              const cleanData2 = ind.extraValues.map(v => {
+                if ('value' in v && v.value !== undefined && v.value !== null && !isNaN(v.value as number)) {
+                  return { time: v.time, value: Number(v.value) };
+                }
+                return { time: v.time };
+              });
+              line2.setData(cleanData2 as any);
+              seriesMapRef.current.set(ind.id + '_extra', line2);
+            }
           }
         });
       });
@@ -413,6 +464,16 @@ export function StockChart({ data, markers = [], indicators = [], height = 500, 
               if (pt && pt.value !== undefined && pt.value !== null && !isNaN(pt.value as any)) {
                  newVals[ind.id] = Number(pt.value).toFixed(2);
               }
+              if (ind.extraValues) {
+                 const pt2 = ind.extraValues.find(v => v.time === normalizedTime);
+                 if (pt2 && pt2.value !== undefined && pt2.value !== null && !isNaN(pt2.value as any)) {
+                   if (newVals[ind.id]) {
+                     newVals[ind.id] += ' / ' + Number(pt2.value).toFixed(2);
+                   } else {
+                     newVals[ind.id] = Number(pt2.value).toFixed(2);
+                   }
+                 }
+              }
             });
             setIndicatorValues(newVals);
           } else {
@@ -421,7 +482,18 @@ export function StockChart({ data, markers = [], indicators = [], height = 500, 
         });
       });
 
+      // Force auto-scale ON for the right price scale after adding all indicator series
+      mainChart.priceScale('right').applyOptions({
+        autoScale: true,
+        scaleMargins: { top: 0.1, bottom: 0.2 },
+      });
       mainChart.timeScale().fitContent();
+
+      // Fit all extra pane charts as well
+      charts.slice(1).forEach(c => {
+        c.priceScale('right').applyOptions({ autoScale: true });
+        c.timeScale().fitContent();
+      });
 
       roRef.current = new ResizeObserver(() => {
         if (mainChartContainerRef.current) {
@@ -480,6 +552,20 @@ export function StockChart({ data, markers = [], indicators = [], height = 500, 
           }
           line.applyOptions({ visible: ind.config.visible !== false });
         }
+
+        if (ind.extraValues) {
+          const lineExtra = seriesMapRef.current.get(ind.id + '_extra');
+          if (lineExtra) {
+            const cleanDataExtra = ind.extraValues.map(v => {
+              if ('value' in v && v.value !== undefined && v.value !== null && !isNaN(v.value as number)) {
+                return { time: v.time, value: Number(v.value) };
+              }
+              return { time: v.time };
+            });
+            lineExtra.setData(cleanDataExtra as any);
+            lineExtra.applyOptions({ visible: ind.config.visible !== false });
+          }
+        }
       });
     }
   }, [data, markers, indicators, showVolume, theme]);
@@ -501,7 +587,23 @@ export function StockChart({ data, markers = [], indicators = [], height = 500, 
           return (
             <div key={ind.key} className={styles.indicatorRow}>
               <span className={styles.indicatorTitle}>{ind.config.type} {ind.config.period}</span>
-              {val && <span className={styles.indicatorValue} style={{ color: ind.color }}>{val}</span>}
+              {val && (
+                <span className={styles.indicatorValue}>
+                  {(() => {
+                    if (typeof val === 'string' && val.includes(' / ')) {
+                      const [v1, v2] = val.split(' / ');
+                      return (
+                        <>
+                          <span style={{ color: ind.color }}>{v1}</span>
+                          <span style={{ color: 'var(--color-text-muted)', margin: '0 4px' }}>/</span>
+                          <span style={{ color: ind.config.botColor || '#f44336' }}>{v2}</span>
+                        </>
+                      );
+                    }
+                    return <span style={{ color: ind.color }}>{val}</span>;
+                  })()}
+                </span>
+              )}
               <div className={styles.indicatorActions}>
                 <button 
                   className={styles.actionBtn} 

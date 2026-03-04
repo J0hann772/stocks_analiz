@@ -16,6 +16,7 @@ export function IndicatorSettingsModal({ isOpen, onClose, indicator, allIndicato
   const [activeTab, setActiveTab] = useState<TabKey>('arguments');
   const [period, setPeriod] = useState(14);
   const [color, setColor] = useState('#7e57c2');
+  const [botColor, setBotColor] = useState('#f44336');
   const [pane, setPane] = useState(0);
   const [source, setSource] = useState('close');
   const [lineWidth, setLineWidth] = useState(2);
@@ -25,11 +26,17 @@ export function IndicatorSettingsModal({ isOpen, onClose, indicator, allIndicato
   const [upperBound, setUpperBound] = useState(70);
   const [lowerBound, setLowerBound] = useState(30);
   const [smoothing, setSmoothing] = useState(14);
+  const [topPeriod, setTopPeriod] = useState(20);
+  const [botPeriod, setBotPeriod] = useState(20);
+  const [topSrc, setTopSrc] = useState('high');
+  const [botSrc, setBotSrc] = useState('low');
+  const [smoothingType, setSmoothingType] = useState<'RMA' | 'SMA' | 'EMA' | 'WMA'>('RMA');
 
   useEffect(() => {
     if (indicator) {
       setPeriod(indicator.period || 14);
       setColor(indicator.color || '#7e57c2');
+      setBotColor(indicator.botColor || '#f44336');
       setPane(indicator.pane || 0);
       setSource(indicator.source || 'close');
       setActiveTab('arguments');
@@ -44,6 +51,16 @@ export function IndicatorSettingsModal({ isOpen, onClose, indicator, allIndicato
       if (indicator.type === 'ADX') {
         setSmoothing(indicator.smoothing !== undefined ? indicator.smoothing : 14);
       }
+      if (indicator.type === 'HHLL') {
+        setTopPeriod(indicator.topPeriod !== undefined ? indicator.topPeriod : 20);
+        setBotPeriod(indicator.botPeriod !== undefined ? indicator.botPeriod : 20);
+        setTopSrc(indicator.topSrc || 'high');
+        setBotSrc(indicator.botSrc || 'low');
+        setPeriod(indicator.topPeriod !== undefined ? indicator.topPeriod : 20);
+      }
+      if (indicator.type === 'ATR' || indicator.type === 'RSI' || indicator.type === 'ADX') {
+        setSmoothingType(indicator.smoothingType || 'RMA');
+      }
     }
   }, [indicator]);
 
@@ -53,12 +70,17 @@ export function IndicatorSettingsModal({ isOpen, onClose, indicator, allIndicato
     if (!indicator) return;
     onSave({ 
       ...indicator, 
-      period, color, pane, source,
+      period, color, botColor, pane, source,
       lineWidth, lineStyle, offset,
       visible: isVisible,
       upperBound: indicator.type === 'RSI' ? upperBound : undefined,
       lowerBound: indicator.type === 'RSI' ? lowerBound : undefined,
       smoothing: indicator.type === 'ADX' ? smoothing : undefined,
+      topPeriod: indicator.type === 'HHLL' ? topPeriod : undefined,
+      botPeriod: indicator.type === 'HHLL' ? botPeriod : undefined,
+      topSrc: indicator.type === 'HHLL' ? (topSrc as any) : undefined,
+      botSrc: indicator.type === 'HHLL' ? (botSrc as any) : undefined,
+      smoothingType: ['ATR', 'RSI', 'ADX'].includes(indicator.type) ? smoothingType : undefined,
     });
     onClose();
   }
@@ -72,6 +94,10 @@ export function IndicatorSettingsModal({ isOpen, onClose, indicator, allIndicato
       setPeriod(20); setColor('#29b6f6'); setSource('close'); setPane(0);
     } else if (indicator.type === 'ADX') {
       setPeriod(14); setSmoothing(14); setColor('#ef5350'); setSource('close'); setPane(2);
+    } else if (indicator.type === 'HHLL') {
+      setTopPeriod(20); setBotPeriod(20); setTopSrc('high'); setBotSrc('low'); setColor('#3fb950'); setBotColor('#f44336'); setPane(0); setPeriod(20);
+    } else if (indicator.type === 'ATR') {
+      setPeriod(14); setColor('#ec407a'); setSource('close'); setPane(1); setSmoothingType('RMA');
     } else {
       setPeriod(20); setColor('#f0b429'); setSource('close'); setPane(0);
     }
@@ -111,16 +137,41 @@ export function IndicatorSettingsModal({ isOpen, onClose, indicator, allIndicato
         <div className={styles.body}>
           {activeTab === 'arguments' && (
             <div className={styles.fields}>
-              <div className={styles.field}>
-                <label className={styles.label}>{indicator.type === 'ADX' ? 'DI Длина' : 'Длина'}</label>
-                <input
-                  type="number"
-                  className={styles.input}
-                  value={period}
-                  onChange={e => setPeriod(parseInt(e.target.value) || 1)}
-                  min="1" max="500"
-                />
-              </div>
+              {indicator.type !== 'HHLL' ? (
+                <div className={styles.field}>
+                  <label className={styles.label}>{indicator.type === 'ADX' ? 'DI Длина' : 'Длина'}</label>
+                  <input
+                    type="number"
+                    className={styles.input}
+                    value={period}
+                    onChange={e => setPeriod(parseInt(e.target.value) || 1)}
+                    min="1" max="500"
+                  />
+                </div>
+              ) : (
+                <>
+                  <div className={styles.field}>
+                    <label className={styles.label}>Top Band Lookback</label>
+                    <input
+                      type="number"
+                      className={styles.input}
+                      value={topPeriod}
+                      onChange={e => setTopPeriod(parseInt(e.target.value) || 1)}
+                      min="1" max="500"
+                    />
+                  </div>
+                  <div className={styles.field}>
+                    <label className={styles.label}>Bot Band Lookback</label>
+                    <input
+                      type="number"
+                      className={styles.input}
+                      value={botPeriod}
+                      onChange={e => setBotPeriod(parseInt(e.target.value) || 1)}
+                      min="1" max="500"
+                    />
+                  </div>
+                </>
+              )}
 
               {indicator.type === 'ADX' && (
                 <div className={styles.field}>
@@ -135,24 +186,69 @@ export function IndicatorSettingsModal({ isOpen, onClose, indicator, allIndicato
                 </div>
               )}
 
-              <div className={styles.field}>
-                <label className={styles.label}>Данные</label>
-                <select
-                  className={styles.select}
-                  value={source}
-                  disabled={indicator.type === 'ADX'}
-                  onChange={e => setSource(e.target.value)}
-                >
-                  <option value="atr">ATR</option>
-                  <option value="close">Close</option>
-                  <option value="open">Open</option>
-                  <option value="high">High</option>
-                  <option value="low">Low</option>
-                  {availableSources.map(src => (
-                    <option key={src.id} value={src.id}>{src.type} {src.period}</option>
-                  ))}
-                </select>
-              </div>
+              {['ATR', 'RSI', 'ADX'].includes(indicator.type) && (
+                <div className={styles.field}>
+                  <label className={styles.label}>Сглаживание</label>
+                  <select
+                    className={styles.select}
+                    value={smoothingType}
+                    onChange={e => setSmoothingType(e.target.value as any)}
+                  >
+                    <option value="RMA">Без учёта скользящих средних (RMA)</option>
+                    <option value="SMA">Простое скользящее среднее (SMA)</option>
+                    <option value="EMA">Экспоненциальное скользящее среднее (EMA)</option>
+                    <option value="WMA">Взвешенное скользящее среднее (WMA)</option>
+                  </select>
+                </div>
+              )}
+
+              {indicator.type !== 'HHLL' ? (
+                <div className={styles.field}>
+                  <label className={styles.label}>Данные</label>
+                  <select
+                    className={styles.select}
+                    value={source}
+                    disabled={indicator.type === 'ADX' || indicator.type === 'ATR'}
+                    onChange={e => setSource(e.target.value)}
+                  >
+                    <option value="atr">ATR</option>
+                    <option value="close">Close</option>
+                    <option value="open">Open</option>
+                    <option value="high">High</option>
+                    <option value="low">Low</option>
+                    {availableSources.map(src => (
+                      <option key={src.id} value={src.id}>{src.type} {src.period}</option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <>
+                  <div className={styles.field}>
+                    <label className={styles.label}>TopSrc</label>
+                    <select
+                      className={styles.select}
+                      value={topSrc}
+                      onChange={e => setTopSrc(e.target.value)}
+                    >
+                      <option value="high">Максимум (High)</option>
+                      <option value="low">Минимум (Low)</option>
+                      <option value="close">Закрытие (Close)</option>
+                    </select>
+                  </div>
+                  <div className={styles.field}>
+                    <label className={styles.label}>BotSrc</label>
+                    <select
+                      className={styles.select}
+                      value={botSrc}
+                      onChange={e => setBotSrc(e.target.value)}
+                    >
+                      <option value="high">Максимум (High)</option>
+                      <option value="low">Минимум (Low)</option>
+                      <option value="close">Закрытие (Close)</option>
+                    </select>
+                  </div>
+                </>
+              )}
 
               <div className={styles.field}>
                 <label className={styles.label}>Отступ</label>
@@ -208,7 +304,7 @@ export function IndicatorSettingsModal({ isOpen, onClose, indicator, allIndicato
           {activeTab === 'style' && (
             <div className={styles.fields}>
               <div className={styles.field}>
-                <label className={styles.label}>Цвет линии</label>
+                <label className={styles.label}>{indicator.type === 'HHLL' ? 'Цвет верхней линии' : 'Цвет линии'}</label>
                 <div className={styles.colorRow}>
                   <input
                     type="color"
@@ -219,6 +315,21 @@ export function IndicatorSettingsModal({ isOpen, onClose, indicator, allIndicato
                   <span className={styles.colorHex}>{color}</span>
                 </div>
               </div>
+
+              {indicator.type === 'HHLL' && (
+                <div className={styles.field}>
+                  <label className={styles.label}>Цвет нижней линии</label>
+                  <div className={styles.colorRow}>
+                    <input
+                      type="color"
+                      className={styles.colorPicker}
+                      value={botColor}
+                      onChange={e => setBotColor(e.target.value)}
+                    />
+                    <span className={styles.colorHex}>{botColor}</span>
+                  </div>
+                </div>
+              )}
 
               <div className={styles.field}>
                 <label className={styles.label}>Тип линии</label>

@@ -19,12 +19,16 @@ export interface User {
 }
 
 // ─── Strategy ───────────────────────────────────
-export type IndicatorName = 'RSI' | 'SMA' | 'EMA' | 'ADX';
+export type IndicatorName = 'RSI' | 'SMA' | 'EMA' | 'ADX' | 'HHLL' | 'ATR';
 
 export interface IndicatorParams {
-  period: number;
+  period?: number;      // Made optional since HHLL uses topPeriod/botPeriod instead
   min?: number;
   max?: number;
+  topPeriod?: number;   // New fields for HHLL
+  botPeriod?: number;
+  topSrc?: 'high' | 'low' | 'close';
+  botSrc?: 'high' | 'low' | 'close';
 }
 
 export interface Strategy {

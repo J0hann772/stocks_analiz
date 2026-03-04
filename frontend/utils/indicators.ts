@@ -233,3 +233,152 @@ export function calculateADX(data: { high?: number, low?: number, close?: number
 
   return result;
 }
+
+export function calculateHHLL(
+  data: { high?: number, low?: number, close?: number, time: any }[],
+  topPeriod: number = 20,
+  botPeriod: number = 20,
+  topSrc: 'high' | 'low' | 'close' = 'high',
+  botSrc: 'high' | 'low' | 'close' = 'low'
+) {
+  const topResult: { time: any; value?: number }[] = [];
+  const botResult: { time: any; value?: number }[] = [];
+
+  for (let i = 0; i < data.length; i++) {
+    const time = data[i].time;
+
+    // Top Band (Highest High over topPeriod)
+    if (i < topPeriod - 1) {
+      topResult.push({ time });
+    } else {
+      let maxVal = -Infinity;
+      let validTop = true;
+      for (let j = 0; j < topPeriod; j++) {
+        const val = data[i - j][topSrc];
+        if (val === undefined || Number.isNaN(val)) {
+          validTop = false;
+          break;
+        }
+        maxVal = Math.max(maxVal, val);
+      }
+      if (validTop && maxVal !== -Infinity) {
+        topResult.push({ time, value: maxVal });
+      } else {
+        topResult.push({ time });
+      }
+    }
+
+    // Bottom Band (Lowest Low over botPeriod)
+    if (i < botPeriod - 1) {
+      botResult.push({ time });
+    } else {
+      let minVal = Infinity;
+      let validBot = true;
+      for (let j = 0; j < botPeriod; j++) {
+        const val = data[i - j][botSrc];
+        if (val === undefined || Number.isNaN(val)) {
+          validBot = false;
+          break;
+        }
+        minVal = Math.min(minVal, val);
+      }
+      if (validBot && minVal !== Infinity) {
+        botResult.push({ time, value: minVal });
+      } else {
+        botResult.push({ time });
+      }
+    }
+  }
+
+  return { top: topResult, bot: botResult };
+}
+
+export function calculateATR(
+  data: { high?: number; low?: number; close?: number; time: any }[],
+  period: number = 14,
+  smoothingType: 'RMA' | 'SMA' | 'EMA' | 'WMA' = 'RMA'
+) {
+  const result: { time: any; value?: number }[] = [];
+  if (data.length === 0) return result;
+
+  const tr: number[] = new Array(data.length).fill(0);
+  
+  // 1. Calculate True Range (TR)
+  for (let i = 0; i < data.length; i++) {
+    if (i === 0) {
+      const h = data[i].high;
+      const l = data[i].low;
+      if (h !== undefined && l !== undefined && !Number.isNaN(h) && !Number.isNaN(l)) {
+         tr[i] = h - l;
+      } else {
+         tr[i] = 0;
+      }
+    } else {
+      const h = data[i].high;
+      const l = data[i].low;
+      const pc = data[i - 1].close;
+
+      if (h !== undefined && l !== undefined && pc !== undefined && !Number.isNaN(h) && !Number.isNaN(l) && !Number.isNaN(pc)) {
+        tr[i] = Math.max(
+          h - l,
+          Math.abs(h - pc),
+          Math.abs(l - pc)
+        );
+      } else {
+        tr[i] = 0;
+      }
+    }
+  }
+
+  // 2. Smooth TR using the selected method
+  const atr: number[] = new Array(data.length).fill(0);
+  const firstValid = period - 1;
+
+  if (firstValid < data.length) {
+    if (smoothingType === 'SMA') {
+      // Simple Moving Average
+      for (let i = firstValid; i < data.length; i++) {
+        let sum = 0;
+        for (let j = i - period + 1; j <= i; j++) sum += tr[j];
+        atr[i] = sum / period;
+      }
+    } else if (smoothingType === 'EMA') {
+      // Exponential Moving Average (alpha = 2 / (period + 1))
+      const alpha = 2 / (period + 1);
+      let sum = 0;
+      for (let i = 0; i < period; i++) sum += tr[i];
+      atr[firstValid] = sum / period;
+      for (let i = firstValid + 1; i < data.length; i++) {
+        atr[i] = alpha * tr[i] + (1 - alpha) * atr[i - 1];
+      }
+    } else if (smoothingType === 'WMA') {
+      // Weighted Moving Average
+      const wSum = (period * (period + 1)) / 2;
+      for (let i = firstValid; i < data.length; i++) {
+        let weighted = 0;
+        for (let j = 0; j < period; j++) {
+          weighted += tr[i - period + 1 + j] * (j + 1);
+        }
+        atr[i] = weighted / wSum;
+      }
+    } else {
+      // RMA (default — Wilder's smoothing, alpha = 1/period)
+      let sum = 0;
+      for (let i = 0; i < period; i++) sum += tr[i];
+      atr[firstValid] = sum / period;
+      for (let i = firstValid + 1; i < data.length; i++) {
+        atr[i] = (atr[i - 1] * (period - 1) + tr[i]) / period;
+      }
+    }
+  }
+
+  for (let i = 0; i < data.length; i++) {
+    if (i < firstValid) {
+      result.push({ time: data[i].time });
+    } else {
+      result.push({ time: data[i].time, value: atr[i] });
+    }
+  }
+
+  return result;
+}
