@@ -3,8 +3,8 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { strategiesApi } from '@/lib/api';
-import type { Strategy, StrategyCreate } from '@/types';
+import { strategiesApi } from '../../lib/api';
+import type { Strategy, StrategyCreate } from '../../types';
 import styles from './page.module.css';
 
 const USER_ID = 1; // TODO: из auth

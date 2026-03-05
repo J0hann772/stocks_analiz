@@ -3,9 +3,9 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { strategiesApi, scannerApi } from '@/lib/api';
-import { StockChart } from '@/components/Chart/StockChart';
-import type { Timeframe, ScannerResult } from '@/types';
+import { strategiesApi, scannerApi } from '../../lib/api';
+import { StockChart } from '../../components/Chart/StockChart';
+import type { Timeframe, ScannerResult } from '../../types';
 import styles from './page.module.css';
 
 const TIMEFRAMES: Timeframe[] = ['1min', '5min', '15min', '1hour', '4hour', '1day'];

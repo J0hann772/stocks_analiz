@@ -3,20 +3,20 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { chartsApi, drawingsApi } from '@/lib/api';
-import { StockChart } from '@/components/Chart/StockChart';
-import { ChartToolbar } from '@/components/Chart/ChartToolbar';
-import { IndicatorConfig } from '@/components/Chart/IndicatorsModal';
-import { IndicatorSettingsModal } from '@/components/Chart/IndicatorSettingsModal';
-import { DrawingToolbar } from '@/components/Chart/DrawingToolbar';
-import { DrawingCanvas } from '@/components/Chart/DrawingCanvas';
-import type { DrawingToolType, DrawnObject } from '@/components/Chart/DrawingTools.types';
+import { chartsApi, drawingsApi } from '../../../lib/api';
+import { StockChart } from '../../../components/Chart/StockChart';
+import { ChartToolbar } from '../../../components/Chart/ChartToolbar';
+import { IndicatorConfig } from '../../../components/Chart/IndicatorsModal';
+import { IndicatorSettingsModal } from '../../../components/Chart/IndicatorSettingsModal';
+import { DrawingToolbar } from '../../../components/Chart/DrawingToolbar';
+import { DrawingCanvas } from '../../../components/Chart/DrawingCanvas';
+import type { DrawingToolType, DrawnObject } from '../../../components/Chart/DrawingTools.types';
 import type { IChartApi, ISeriesApi } from 'lightweight-charts';
-import { calculateSMA, calculateEMA, calculateRSI, calculateADX, calculateHHLL, calculateATR, calculateAlligator, calculateHL2 } from '@/utils/indicators';
-import type { Timeframe } from '@/types';
+import { calculateSMA, calculateEMA, calculateRSI, calculateADX, calculateHHLL, calculateATR, calculateAlligator, calculateHL2 } from '../../../utils/indicators';
+import type { Timeframe } from '../../../types';
 import styles from './page.module.css';
 
-import { useMarketWebsocket } from '@/hooks/useMarketWebsocket';
+import { useMarketWebsocket } from '../../../hooks/useMarketWebsocket';
 
 export default function ChartPage() {
   const params = useParams<{ symbol: string }>();

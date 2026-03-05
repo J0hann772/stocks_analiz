@@ -2,8 +2,8 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { strategiesApi } from '@/lib/api';
-import type { Timeframe } from '@/types';
+import { strategiesApi } from '../../lib/api';
+import type { Timeframe } from '../../types';
 import styles from './ChartToolbar.module.css';
 
 const TIMEFRAMES: { label: string; value: Timeframe }[] = [

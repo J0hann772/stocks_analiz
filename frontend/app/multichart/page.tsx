@@ -3,9 +3,9 @@
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useState, Suspense } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { chartsApi } from '@/lib/api';
-import { StockChart } from '@/components/Chart/StockChart';
-import type { Timeframe } from '@/types';
+import { chartsApi } from '../../lib/api';
+import { StockChart } from '../../components/Chart/StockChart';
+import type { Timeframe } from '../../types';
 import styles from './page.module.css';
 
 function ChartCard({ symbol, timeframe, onExpand }: {
