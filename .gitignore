@@ -69,3 +69,8 @@ htmlcov/
 .agent/
 .gemini/
 .env*
+
+# DO NOT commit SSL certs or real prod env
+certbot/conf/
+certbot/www/
+.env.prod

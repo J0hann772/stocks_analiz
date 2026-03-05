@@ -71,13 +71,13 @@ export default function LoginPage() {
           </div>
 
           <div className={styles.field}>
-            <label className={styles.label}>Пароль admin (инвайт-код)</label>
+            <label className={styles.label}>Инвайт-код</label>
             <input
               className={styles.input}
               type="password"
               value={adminPassword}
               onChange={e => setAdminPassword(e.target.value)}
-              placeholder="admin"
+              placeholder="••••••••"
               required
             />
           </div>

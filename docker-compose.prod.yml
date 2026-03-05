@@ -1,0 +1,170 @@
+version: '3.8'
+
+# ══════════════════════════════════════════════════════════════════
+#  PRODUCTION docker-compose — stockscreener.ru
+#
+#  Usage:
+#    1. Fill .env.prod (or set env vars on server)
+#    2. Run:  bash certbot/init-letsencrypt.sh   (first time only)
+#    3. Run:  docker compose -f docker-compose.prod.yml up -d
+# ══════════════════════════════════════════════════════════════════
+
+services:
+
+  # ─── Nginx reverse proxy + SSL ──────────────────────────────────
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: stock_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./certbot/conf:/etc/letsencrypt:ro
+      - ./certbot/www:/var/www/certbot:ro
+    depends_on:
+      - api
+      - frontend
+    networks:
+      - app_network
+
+  # ─── Certbot (auto-renew SSL) ────────────────────────────────────
+  certbot:
+    image: certbot/certbot:latest
+    container_name: stock_certbot
+    restart: unless-stopped
+    volumes:
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    # Renew twice a day (recommended by Let's Encrypt)
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew --quiet; sleep 12h & wait $${!}; done'"
+    networks:
+      - app_network
+
+  # ─── FastAPI backend ─────────────────────────────────────────────
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: stock_analyzer_api
+    # No exposed ports — only accessible via nginx internally
+    expose:
+      - "8000"
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB:-stock_analyzer}
+      - POSTGRES_HOST=db
+      - POSTGRES_PORT=5432
+      - REDIS_URL=redis://redis:6379
+      - FMP_API_KEY=${FMP_API_KEY}
+      - TG_BOT_TOKEN=${TG_BOT_TOKEN}
+      - TG_CHAT_ID=${TG_CHAT_ID}
+      - TG_SIGNAL_BOT_TOKEN=${TG_SIGNAL_BOT_TOKEN}
+      - TEAM_PASSWORD=${TEAM_PASSWORD}
+      - TZ=Europe/Moscow
+      - APP_ENV=production
+    volumes:
+      # No bind-mount in prod — use image layers only
+      - ./backend/migrations:/app/migrations
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - app_network
+
+  # ─── ARQ worker ──────────────────────────────────────────────────
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: stock_analyzer_worker
+    command: arq workers.main.WorkerSettings
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB:-stock_analyzer}
+      - POSTGRES_HOST=db
+      - POSTGRES_PORT=5432
+      - REDIS_URL=redis://redis:6379
+      - FMP_API_KEY=${FMP_API_KEY}
+      - TG_BOT_TOKEN=${TG_BOT_TOKEN}
+      - TG_CHAT_ID=${TG_CHAT_ID}
+      - TG_SIGNAL_BOT_TOKEN=${TG_SIGNAL_BOT_TOKEN}
+      - TZ=Europe/Moscow
+      - APP_ENV=production
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - app_network
+
+  # ─── PostgreSQL ──────────────────────────────────────────────────
+  db:
+    image: postgres:15
+    container_name: stock_analyzer_db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB:-stock_analyzer}
+      - TZ=Europe/Moscow
+    expose:
+      - "5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-stock_analyzer}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app_network
+
+  # ─── Redis ───────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: stock_analyzer_redis
+    restart: unless-stopped
+    expose:
+      - "6379"
+    volumes:
+      - redis_data:/data
+    environment:
+      - TZ=Europe/Moscow
+    networks:
+      - app_network
+
+  # ─── Next.js frontend ────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: stock_analyzer_frontend
+    expose:
+      - "3000"
+    restart: unless-stopped
+    environment:
+      - NEXT_PUBLIC_API_URL=https://stockscreener.ru
+      - TZ=Europe/Moscow
+      - NODE_ENV=production
+    depends_on:
+      - api
+    networks:
+      - app_network
+
+networks:
+  app_network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
