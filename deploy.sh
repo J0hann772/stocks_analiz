@@ -48,18 +48,19 @@ if ! docker compose version &>/dev/null; then
 fi
 info "All dependencies OK"
 
-# ── Clone or update repo ──────────────────────────────────────────────────────
+# ── Syncing repository ──────────────────────────────────────────────────────
 step "Syncing repository"
 if [ ! -d "$DEPLOY_DIR/.git" ]; then
   info "Cloning from $REPO_URL ..."
   git clone --branch "$BRANCH" "$REPO_URL" "$DEPLOY_DIR"
-else
-  info "Pulling latest from $BRANCH ..."
   cd "$DEPLOY_DIR"
-  git fetch origin
+else
+  info "Fetching and force-resetting to origin/$BRANCH ..."
+  # This discards any local changes to tracked files to avoid pull conflicts
+  git fetch origin "$BRANCH"
   git reset --hard "origin/$BRANCH"
+  git clean -fd  # remove untracked files/dirs if any (except ignored ones)
 fi
-cd "$DEPLOY_DIR"
 info "Repo at: $(git log -1 --pretty='%h %s (%ci)')"
 
 # ── .env setup ────────────────────────────────────────────────────────────────
