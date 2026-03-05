@@ -32,6 +32,17 @@ export function IndicatorSettingsModal({ isOpen, onClose, indicator, allIndicato
   const [botSrc, setBotSrc] = useState('low');
   const [smoothingType, setSmoothingType] = useState<'RMA' | 'SMA' | 'EMA' | 'WMA'>('RMA');
 
+  // Alligator specific states
+  const [jawPeriod, setJawPeriod] = useState(13);
+  const [jawOffset, setJawOffset] = useState(8);
+  const [jawColor, setJawColor] = useState('#1848bb');
+  const [teethPeriod, setTeethPeriod] = useState(8);
+  const [teethOffset, setTeethOffset] = useState(5);
+  const [teethColor, setTeethColor] = useState('#e2323e');
+  const [lipsPeriod, setLipsPeriod] = useState(5);
+  const [lipsOffset, setLipsOffset] = useState(3);
+  const [lipsColor, setLipsColor] = useState('#12aa52');
+
   useEffect(() => {
     if (indicator) {
       setPeriod(indicator.period || 14);
@@ -61,6 +72,17 @@ export function IndicatorSettingsModal({ isOpen, onClose, indicator, allIndicato
       if (indicator.type === 'ATR' || indicator.type === 'RSI' || indicator.type === 'ADX') {
         setSmoothingType(indicator.smoothingType || 'RMA');
       }
+      if (indicator.type === 'Alligator') {
+        setJawPeriod(indicator.jawPeriod !== undefined ? indicator.jawPeriod : 13);
+        setJawOffset(indicator.jawOffset !== undefined ? indicator.jawOffset : 8);
+        setJawColor(indicator.jawColor || '#1848bb');
+        setTeethPeriod(indicator.teethPeriod !== undefined ? indicator.teethPeriod : 8);
+        setTeethOffset(indicator.teethOffset !== undefined ? indicator.teethOffset : 5);
+        setTeethColor(indicator.teethColor || '#e2323e');
+        setLipsPeriod(indicator.lipsPeriod !== undefined ? indicator.lipsPeriod : 5);
+        setLipsOffset(indicator.lipsOffset !== undefined ? indicator.lipsOffset : 3);
+        setLipsColor(indicator.lipsColor || '#12aa52');
+      }
     }
   }, [indicator]);
 
@@ -70,7 +92,9 @@ export function IndicatorSettingsModal({ isOpen, onClose, indicator, allIndicato
     if (!indicator) return;
     onSave({ 
       ...indicator, 
-      period, color, botColor, pane, source,
+      period, 
+      color: indicator.type === 'Alligator' ? jawColor : color,
+      botColor, pane, source,
       lineWidth, lineStyle, offset,
       visible: isVisible,
       upperBound: indicator.type === 'RSI' ? upperBound : undefined,
@@ -81,6 +105,15 @@ export function IndicatorSettingsModal({ isOpen, onClose, indicator, allIndicato
       topSrc: indicator.type === 'HHLL' ? (topSrc as any) : undefined,
       botSrc: indicator.type === 'HHLL' ? (botSrc as any) : undefined,
       smoothingType: ['ATR', 'RSI', 'ADX'].includes(indicator.type) ? smoothingType : undefined,
+      jawPeriod: indicator.type === 'Alligator' ? jawPeriod : undefined,
+      jawOffset: indicator.type === 'Alligator' ? jawOffset : undefined,
+      jawColor: indicator.type === 'Alligator' ? jawColor : undefined,
+      teethPeriod: indicator.type === 'Alligator' ? teethPeriod : undefined,
+      teethOffset: indicator.type === 'Alligator' ? teethOffset : undefined,
+      teethColor: indicator.type === 'Alligator' ? teethColor : undefined,
+      lipsPeriod: indicator.type === 'Alligator' ? lipsPeriod : undefined,
+      lipsOffset: indicator.type === 'Alligator' ? lipsOffset : undefined,
+      lipsColor: indicator.type === 'Alligator' ? lipsColor : undefined,
     });
     onClose();
   }
@@ -98,6 +131,11 @@ export function IndicatorSettingsModal({ isOpen, onClose, indicator, allIndicato
       setTopPeriod(20); setBotPeriod(20); setTopSrc('high'); setBotSrc('low'); setColor('#3fb950'); setBotColor('#f44336'); setPane(0); setPeriod(20);
     } else if (indicator.type === 'ATR') {
       setPeriod(14); setColor('#ec407a'); setSource('close'); setPane(1); setSmoothingType('RMA');
+    } else if (indicator.type === 'Alligator') {
+      setPeriod(13); setColor('#1848bb'); setSource('hl2'); setPane(0); setOffset(0);
+      setJawPeriod(13); setJawOffset(8); setJawColor('#1848bb');
+      setTeethPeriod(8); setTeethOffset(5); setTeethColor('#e2323e');
+      setLipsPeriod(5); setLipsOffset(3); setLipsColor('#12aa52');
     } else {
       setPeriod(20); setColor('#f0b429'); setSource('close'); setPane(0);
     }
@@ -137,18 +175,34 @@ export function IndicatorSettingsModal({ isOpen, onClose, indicator, allIndicato
         <div className={styles.body}>
           {activeTab === 'arguments' && (
             <div className={styles.fields}>
-              {indicator.type !== 'HHLL' ? (
-                <div className={styles.field}>
-                  <label className={styles.label}>{indicator.type === 'ADX' ? 'DI Длина' : 'Длина'}</label>
-                  <input
-                    type="number"
-                    className={styles.input}
-                    value={period}
-                    onChange={e => setPeriod(parseInt(e.target.value) || 1)}
-                    min="1" max="500"
-                  />
-                </div>
-              ) : (
+              {indicator.type === 'Alligator' ? (
+                <>
+                  <div className={styles.field}>
+                    <label className={styles.label}>Длина Jaw</label>
+                    <input type="number" className={styles.input} value={jawPeriod} onChange={e => setJawPeriod(parseInt(e.target.value) || 1)} min="1" max="500" />
+                  </div>
+                  <div className={styles.field}>
+                    <label className={styles.label}>Длина Teeth</label>
+                    <input type="number" className={styles.input} value={teethPeriod} onChange={e => setTeethPeriod(parseInt(e.target.value) || 1)} min="1" max="500" />
+                  </div>
+                  <div className={styles.field}>
+                    <label className={styles.label}>Длина Lips</label>
+                    <input type="number" className={styles.input} value={lipsPeriod} onChange={e => setLipsPeriod(parseInt(e.target.value) || 1)} min="1" max="500" />
+                  </div>
+                  <div className={styles.field}>
+                    <label className={styles.label}>Смещение Jaw</label>
+                    <input type="number" className={styles.input} value={jawOffset} onChange={e => setJawOffset(parseInt(e.target.value) || 0)} />
+                  </div>
+                  <div className={styles.field}>
+                    <label className={styles.label}>Смещение Teeth</label>
+                    <input type="number" className={styles.input} value={teethOffset} onChange={e => setTeethOffset(parseInt(e.target.value) || 0)} />
+                  </div>
+                  <div className={styles.field}>
+                    <label className={styles.label}>Смещение Lips</label>
+                    <input type="number" className={styles.input} value={lipsOffset} onChange={e => setLipsOffset(parseInt(e.target.value) || 0)} />
+                  </div>
+                </>
+              ) : indicator.type === 'HHLL' ? (
                 <>
                   <div className={styles.field}>
                     <label className={styles.label}>Top Band Lookback</label>
@@ -171,6 +225,17 @@ export function IndicatorSettingsModal({ isOpen, onClose, indicator, allIndicato
                     />
                   </div>
                 </>
+              ) : (
+                <div className={styles.field}>
+                  <label className={styles.label}>{indicator.type === 'ADX' ? 'DI Длина' : 'Длина'}</label>
+                  <input
+                    type="number"
+                    className={styles.input}
+                    value={period}
+                    onChange={e => setPeriod(parseInt(e.target.value) || 1)}
+                    min="1" max="500"
+                  />
+                </div>
               )}
 
               {indicator.type === 'ADX' && (
@@ -211,6 +276,7 @@ export function IndicatorSettingsModal({ isOpen, onClose, indicator, allIndicato
                     disabled={indicator.type === 'ADX' || indicator.type === 'ATR'}
                     onChange={e => setSource(e.target.value)}
                   >
+                    <option value="hl2">HL2</option>
                     <option value="atr">ATR</option>
                     <option value="close">Close</option>
                     <option value="open">Open</option>
@@ -250,15 +316,17 @@ export function IndicatorSettingsModal({ isOpen, onClose, indicator, allIndicato
                 </>
               )}
 
-              <div className={styles.field}>
-                <label className={styles.label}>Отступ</label>
-                <input
-                  type="number"
-                  className={styles.input}
-                  value={offset}
-                  onChange={e => setOffset(parseInt(e.target.value) || 0)}
-                />
-              </div>
+              {indicator.type !== 'Alligator' && (
+                <div className={styles.field}>
+                  <label className={styles.label}>Отступ</label>
+                  <input
+                    type="number"
+                    className={styles.input}
+                    value={offset}
+                    onChange={e => setOffset(parseInt(e.target.value) || 0)}
+                  />
+                </div>
+              )}
 
               <div className={styles.separator} />
 
@@ -303,18 +371,44 @@ export function IndicatorSettingsModal({ isOpen, onClose, indicator, allIndicato
 
           {activeTab === 'style' && (
             <div className={styles.fields}>
-              <div className={styles.field}>
-                <label className={styles.label}>{indicator.type === 'HHLL' ? 'Цвет верхней линии' : 'Цвет линии'}</label>
-                <div className={styles.colorRow}>
-                  <input
-                    type="color"
-                    className={styles.colorPicker}
-                    value={color}
-                    onChange={e => setColor(e.target.value)}
-                  />
-                  <span className={styles.colorHex}>{color}</span>
+              {indicator.type === 'Alligator' ? (
+                <>
+                  <div className={styles.field}>
+                    <label className={styles.label}>Jaw</label>
+                    <div className={styles.colorRow}>
+                      <input type="color" className={styles.colorPicker} value={jawColor} onChange={e => setJawColor(e.target.value)} />
+                      <span className={styles.colorHex}>{jawColor}</span>
+                    </div>
+                  </div>
+                  <div className={styles.field}>
+                    <label className={styles.label}>Teeth</label>
+                    <div className={styles.colorRow}>
+                      <input type="color" className={styles.colorPicker} value={teethColor} onChange={e => setTeethColor(e.target.value)} />
+                      <span className={styles.colorHex}>{teethColor}</span>
+                    </div>
+                  </div>
+                  <div className={styles.field}>
+                    <label className={styles.label}>Lips</label>
+                    <div className={styles.colorRow}>
+                      <input type="color" className={styles.colorPicker} value={lipsColor} onChange={e => setLipsColor(e.target.value)} />
+                      <span className={styles.colorHex}>{lipsColor}</span>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className={styles.field}>
+                  <label className={styles.label}>{indicator.type === 'HHLL' ? 'Цвет верхней линии' : 'Цвет линии'}</label>
+                  <div className={styles.colorRow}>
+                    <input
+                      type="color"
+                      className={styles.colorPicker}
+                      value={color}
+                      onChange={e => setColor(e.target.value)}
+                    />
+                    <span className={styles.colorHex}>{color}</span>
+                  </div>
                 </div>
-              </div>
+              )}
 
               {indicator.type === 'HHLL' && (
                 <div className={styles.field}>

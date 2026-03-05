@@ -3,7 +3,7 @@ import styles from './IndicatorsModal.module.css';
 
 export interface IndicatorConfig {
   id: string; // unique id
-  type: 'SMA' | 'EMA' | 'RSI' | 'ADX' | 'HHLL' | 'ATR';
+  type: 'SMA' | 'EMA' | 'RSI' | 'ADX' | 'HHLL' | 'ATR' | 'Alligator';
   period: number;
   color: string;
   botColor?: string; // Additional color field for dual-line indicators
@@ -21,6 +21,17 @@ export interface IndicatorConfig {
   botPeriod?: number;  // HHLL Bot Band Lookback
   topSrc?: 'high' | 'low' | 'close'; // HHLL Top Source
   botSrc?: 'high' | 'low' | 'close'; // HHLL Bot Source
+
+  // Alligator specific properties
+  jawPeriod?: number;
+  jawOffset?: number;
+  jawColor?: string;
+  teethPeriod?: number;
+  teethOffset?: number;
+  teethColor?: string;
+  lipsPeriod?: number;
+  lipsOffset?: number;
+  lipsColor?: string;
 }
 
 interface Props {
@@ -121,7 +132,18 @@ ATR — это скользящее среднее TR за N периодов.
 • Фильтр ложных пробоев — прорыв считается значимым, если движение > 1 ATR
 
 Методы сглаживания: RMA (по Уайлдеру, по умолчанию), SMA, EMA, WMA.
-Стандартный период: 14 свечей.`
+Стандартный период: 14 свечей.`,
+
+  Alligator: `Аллигатор Билла Вильямса — трендовый индикатор, который состоит из трех сглаженных скользящих средних:
+• Челюсть (Jaw, синяя линия) — 13-периодная SMMA, сдвинутая на 8 свечей в будущее
+• Зубы (Teeth, красная линия) — 8-периодная SMMA, сдвинутая на 5 свечей в будущее
+• Губы (Lips, зеленая линия) — 5-периодная SMMA, сдвинутая на 3 свечи в будущее
+
+Интерпретация:
+• Аллигатор "спит": Линии переплетены, тренда нет — не время для торговли.
+• Аллигатор "просыпается": Губы (зеленая) первой реагирует на цену, затем Зубы (красная), затем Челюсть (синяя). Линии раскрываются веером.
+• Аллигатор "ест": Расстояние между линиями растет, тренд сильный.
+• Аллигатор "сыт": Линии снова начинают сходиться, фиксируйте прибыль.`
 };
 
 export function IndicatorsModal({ isOpen, onClose, onAdd }: Props) {
@@ -129,7 +151,7 @@ export function IndicatorsModal({ isOpen, onClose, onAdd }: Props) {
 
   if (!isOpen) return null;
 
-  function handleSelect(type: 'SMA' | 'EMA' | 'RSI' | 'ADX' | 'HHLL' | 'ATR') {
+  function handleSelect(type: 'SMA' | 'EMA' | 'RSI' | 'ADX' | 'HHLL' | 'ATR' | 'Alligator') {
     // Default configs for instantaneous addition
     let defaultColor = '#f0b429';
     let defaultBotColor: string | undefined = undefined;
@@ -157,6 +179,8 @@ export function IndicatorsModal({ isOpen, onClose, onAdd }: Props) {
       defaultColor = '#ec407a';
       defaultPeriod = 14;
       defaultPane = 1; // Put ATR in a separate pane
+    } else if (type === 'Alligator') {
+      defaultColor = '#2196f3'; // Jaw color
     } else {
       defaultColor = '#f0b429';
       defaultPeriod = 20;
@@ -168,7 +192,7 @@ export function IndicatorsModal({ isOpen, onClose, onAdd }: Props) {
       color: defaultColor, 
       botColor: defaultBotColor,
       pane: defaultPane, 
-      source: 'close', 
+      source: type === 'Alligator' ? 'hl2' : 'close', 
       visible: true, 
       upperBound: defaultUpper, 
       lowerBound: defaultLower, 
@@ -178,6 +202,15 @@ export function IndicatorsModal({ isOpen, onClose, onAdd }: Props) {
       botPeriod: type === 'HHLL' ? 20 : undefined,
       topSrc: type === 'HHLL' ? 'high' : undefined,
       botSrc: type === 'HHLL' ? 'low' : undefined,
+      jawPeriod: type === 'Alligator' ? 13 : undefined,
+      jawOffset: type === 'Alligator' ? 8 : undefined,
+      jawColor: type === 'Alligator' ? '#1848bb' : undefined,
+      teethPeriod: type === 'Alligator' ? 8 : undefined,
+      teethOffset: type === 'Alligator' ? 5 : undefined,
+      teethColor: type === 'Alligator' ? '#e2323e' : undefined,
+      lipsPeriod: type === 'Alligator' ? 5 : undefined,
+      lipsOffset: type === 'Alligator' ? 3 : undefined,
+      lipsColor: type === 'Alligator' ? '#12aa52' : undefined,
     });
     onClose();
   }
@@ -186,13 +219,14 @@ export function IndicatorsModal({ isOpen, onClose, onAdd }: Props) {
     setExpandedHelp(prev => prev === type ? null : type);
   }
 
-  const indicators: { type: 'SMA' | 'EMA' | 'RSI' | 'ADX' | 'HHLL' | 'ATR'; label: string; short: string }[] = [
+  const indicators: { type: 'SMA' | 'EMA' | 'RSI' | 'ADX' | 'HHLL' | 'ATR' | 'Alligator'; label: string; short: string }[] = [
     { type: 'SMA', label: 'Простая скользящая средняя', short: 'SMA' },
     { type: 'EMA', label: 'Экспоненциальная скользящая средняя', short: 'EMA' },
     { type: 'RSI', label: 'Индекс относительной силы', short: 'RSI' },
     { type: 'ADX', label: 'Средний направленный индекс', short: 'ADX' },
     { type: 'HHLL', label: 'Highest High, Lowest Low', short: 'HHLL' },
     { type: 'ATR', label: 'Истинный средний диапазон', short: 'ATR' },
+    { type: 'Alligator', label: 'Аллигатор Билла Вильямса', short: 'Alligator' },
   ];
 
   return (

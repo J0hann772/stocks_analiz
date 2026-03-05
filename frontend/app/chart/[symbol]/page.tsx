@@ -12,7 +12,7 @@ import { DrawingToolbar } from '@/components/Chart/DrawingToolbar';
 import { DrawingCanvas } from '@/components/Chart/DrawingCanvas';
 import type { DrawingToolType, DrawnObject } from '@/components/Chart/DrawingTools.types';
 import type { IChartApi, ISeriesApi } from 'lightweight-charts';
-import { calculateSMA, calculateEMA, calculateRSI, calculateADX, calculateHHLL, calculateATR } from '@/utils/indicators';
+import { calculateSMA, calculateEMA, calculateRSI, calculateADX, calculateHHLL, calculateATR, calculateAlligator, calculateHL2 } from '@/utils/indicators';
 import type { Timeframe } from '@/types';
 import styles from './page.module.css';
 
@@ -276,7 +276,7 @@ export default function ChartPage() {
     const dependentIndicators: any[] = [];
 
     activeIndicators.forEach((conf: IndicatorConfig) => {
-      if (['close', 'open', 'high', 'low'].includes((conf.source || 'close').toLowerCase())) {
+      if (['close', 'open', 'high', 'low', 'hl2'].includes((conf.source || 'close').toLowerCase())) {
         baseIndicators.push(conf);
       } else {
         dependentIndicators.push(conf);
@@ -292,12 +292,14 @@ export default function ChartPage() {
       open: liveData.map((d: any) => ({ time: d.time, value: d.open })),
       high: liveData.map((d: any) => ({ time: d.time, value: d.high })),
       low: liveData.map((d: any) => ({ time: d.time, value: d.low })),
+      hl2: calculateHL2(liveData),
     };
 
     // Helper to process one config
     function processIndicator(conf: IndicatorConfig, sourceData: any[]) {
       let vals: any[] = [];
       let extraVals: any[] | undefined = undefined;
+      let extraVals2: any[] | undefined = undefined;
 
       if (conf.type === 'SMA') vals = calculateSMA(sourceData, conf.period);
       if (conf.type === 'EMA') vals = calculateEMA(sourceData, conf.period);
@@ -331,6 +333,17 @@ export default function ChartPage() {
         }));
         vals = calculateATR(ohclArgs, conf.period || 14, conf.smoothingType || 'RMA');
       }
+      if (conf.type === 'Alligator') {
+        const alligatorData = calculateAlligator(
+          sourceData, 
+          conf.jawPeriod, conf.jawOffset,
+          conf.teethPeriod, conf.teethOffset,
+          conf.lipsPeriod, conf.lipsOffset
+        );
+        vals = alligatorData.jaw;
+        extraVals = alligatorData.teeth;
+        extraVals2 = alligatorData.lips;
+      }
 
       linesMap.set(conf.id, vals);
 
@@ -342,6 +355,7 @@ export default function ChartPage() {
         pane: conf.pane || 0,
         values: vals,
         extraValues: extraVals,
+        extraValues2: extraVals2,
       });
 
       // Yellow RSI MA line removed per user request

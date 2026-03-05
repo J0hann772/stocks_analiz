@@ -20,6 +20,7 @@ export interface StockIndicator {
   color: string;
   values: { time: string; value: number }[];
   extraValues?: { time: string; value: number }[]; // For bottom band of HHLL
+  extraValues2?: { time: string; value: number }[]; // For 3-line indicators like Alligator
   pane?: number;
 }
 
@@ -203,7 +204,7 @@ export function StockChart({ data, markers = [], indicators = [], height = 500, 
 
         if (ind.extraValues) {
           const line2 = mainChart.addLineSeries({ 
-            color: ind.config.botColor || '#f85149', 
+            color: ind.config.type === 'Alligator' ? ind.config.teethColor : (ind.config.botColor || '#f85149'), 
             lineWidth: ind.config.lineWidth !== undefined ? ind.config.lineWidth : 2,
             lineStyle: ind.config.lineStyle !== undefined ? ind.config.lineStyle : 0,
             visible: ind.config.visible !== false,
@@ -219,6 +220,26 @@ export function StockChart({ data, markers = [], indicators = [], height = 500, 
           });
           line2.setData(cleanData2 as any);
           seriesMapRef.current.set(ind.id + '_extra', line2);
+        }
+
+        if (ind.extraValues2) {
+          const line3 = mainChart.addLineSeries({ 
+            color: ind.config.type === 'Alligator' ? ind.config.lipsColor : '#12aa52', 
+            lineWidth: ind.config.lineWidth !== undefined ? ind.config.lineWidth : 2,
+            lineStyle: ind.config.lineStyle !== undefined ? ind.config.lineStyle : 0,
+            visible: ind.config.visible !== false,
+            autoscaleInfoProvider: () => ({
+              priceRange: null,
+            }),
+          });
+          const cleanData3 = ind.extraValues2.map((v: any) => {
+            if ('value' in v && v.value !== undefined && v.value !== null && !isNaN(v.value as number)) {
+              return { time: v.time, value: Number(v.value) };
+            }
+            return { time: v.time };
+          });
+          line3.setData(cleanData3 as any);
+          seriesMapRef.current.set(ind.id + '_extra2', line3);
         }
       });
 
@@ -381,6 +402,23 @@ export function StockChart({ data, markers = [], indicators = [], height = 500, 
               line2.setData(cleanData2 as any);
               seriesMapRef.current.set(ind.id + '_extra', line2);
             }
+
+            if (ind.extraValues2) {
+              const line3 = extraChart.addLineSeries({ 
+                color: ind.config.type === 'Alligator' ? ind.config.lipsColor : '#12aa52', 
+                lineWidth: ind.config.lineWidth !== undefined ? ind.config.lineWidth : 2,
+                lineStyle: ind.config.lineStyle !== undefined ? ind.config.lineStyle : 0,
+                visible: ind.config.visible !== false
+              });
+              const cleanData3 = ind.extraValues2.map((v: any) => {
+                if ('value' in v && v.value !== undefined && v.value !== null && !isNaN(v.value as number)) {
+                  return { time: v.time, value: Number(v.value) };
+                }
+                return { time: v.time };
+              });
+              line3.setData(cleanData3 as any);
+              seriesMapRef.current.set(ind.id + '_extra2', line3);
+            }
           }
         });
       });
@@ -471,6 +509,16 @@ export function StockChart({ data, markers = [], indicators = [], height = 500, 
                      newVals[ind.id] += ' / ' + Number(pt2.value).toFixed(2);
                    } else {
                      newVals[ind.id] = Number(pt2.value).toFixed(2);
+                   }
+                 }
+              }
+              if (ind.extraValues2) {
+                 const pt3 = ind.extraValues2.find(v => v.time === normalizedTime);
+                 if (pt3 && pt3.value !== undefined && pt3.value !== null && !isNaN(pt3.value as any)) {
+                   if (newVals[ind.id]) {
+                     newVals[ind.id] += ' / ' + Number(pt3.value).toFixed(2);
+                   } else {
+                     newVals[ind.id] = Number(pt3.value).toFixed(2);
                    }
                  }
               }
@@ -591,14 +639,27 @@ export function StockChart({ data, markers = [], indicators = [], height = 500, 
                 <span className={styles.indicatorValue}>
                   {(() => {
                     if (typeof val === 'string' && val.includes(' / ')) {
-                      const [v1, v2] = val.split(' / ');
-                      return (
-                        <>
-                          <span style={{ color: ind.color }}>{v1}</span>
-                          <span style={{ color: 'var(--color-text-muted)', margin: '0 4px' }}>/</span>
-                          <span style={{ color: ind.config.botColor || '#f44336' }}>{v2}</span>
-                        </>
-                      );
+                      const parts = val.split(' / ');
+                      if (ind.config.type === 'Alligator' && parts.length === 3) {
+                        return (
+                          <>
+                            <span style={{ color: ind.config.jawColor || ind.color || '#1848bb' }}>{parts[0]}</span>
+                            <span style={{ color: 'var(--color-text-muted)', margin: '0 4px' }}>/</span>
+                            <span style={{ color: ind.config.teethColor || '#e2323e' }}>{parts[1]}</span>
+                            <span style={{ color: 'var(--color-text-muted)', margin: '0 4px' }}>/</span>
+                            <span style={{ color: ind.config.lipsColor || '#12aa52' }}>{parts[2]}</span>
+                          </>
+                        );
+                      }
+                      if (parts.length >= 2) {
+                        return (
+                          <>
+                            <span style={{ color: ind.color }}>{parts[0]}</span>
+                            <span style={{ color: 'var(--color-text-muted)', margin: '0 4px' }}>/</span>
+                            <span style={{ color: ind.config.botColor || '#f44336' }}>{parts[1]}</span>
+                          </>
+                        );
+                      }
                     }
                     return <span style={{ color: ind.color }}>{val}</span>;
                   })()}

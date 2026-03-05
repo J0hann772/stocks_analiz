@@ -382,3 +382,120 @@ export function calculateATR(
 
   return result;
 }
+
+export function calculateHL2(data: { high?: number, low?: number, time: any }[]) {
+  return data.map(d => ({
+    time: d.time,
+    value: d.high !== undefined && d.low !== undefined && !Number.isNaN(d.high) && !Number.isNaN(d.low)
+      ? (d.high + d.low) / 2
+      : undefined
+  }));
+}
+
+function calculateSMMA(data: { value?: number, time: any }[], period: number) {
+  const result: (number | undefined)[] = new Array(data.length).fill(undefined);
+  
+  if (data.length < period) return result;
+
+  let firstValidIdx = -1;
+  for (let i = 0; i < data.length; i++) {
+    if (data[i].value !== undefined && !Number.isNaN(data[i].value)) {
+      firstValidIdx = i;
+      break;
+    }
+  }
+
+  if (firstValidIdx === -1 || data.length - firstValidIdx < period) return result;
+
+  // First SMMA is a simple moving average
+  let sum = 0;
+  for (let i = firstValidIdx; i < firstValidIdx + period; i++) {
+    sum += data[i].value as number;
+  }
+  let smma = sum / period;
+  result[firstValidIdx + period - 1] = smma;
+
+  // Subsequent SMMA
+  for (let i = firstValidIdx + period; i < data.length; i++) {
+    const val = data[i].value;
+    if (val !== undefined && !Number.isNaN(val)) {
+      smma = (smma * (period - 1) + val) / period;
+      result[i] = smma;
+    } else {
+      result[i] = undefined;
+    }
+  }
+
+  return result;
+}
+
+export function calculateAlligator(
+  data: { value?: number, time: any }[],
+  jawPeriod = 13, jawOffset = 8,
+  teethPeriod = 8, teethOffset = 5,
+  lipsPeriod = 5, lipsOffset = 3
+) {
+  const jawSmma = calculateSMMA(data, jawPeriod);
+  const teethSmma = calculateSMMA(data, teethPeriod);
+  const lipsSmma = calculateSMMA(data, lipsPeriod);
+
+  // Helper to shift array forward by offset, maintaining future times
+  const shiftLine = (smmaArray: (number | undefined)[], offset: number) => {
+    const result: { time: any; value?: number }[] = [];
+    
+    // Estimate interval from last two valid times
+    let isNumber = true;
+    let interval = 86400; // default 1 day in seconds
+    if (data.length >= 2) {
+      const t1 = data[data.length - 1].time;
+      const t2 = data[data.length - 2].time;
+      if (typeof t1 === 'number' && typeof t2 === 'number') {
+        interval = t1 - t2;
+      } else if (typeof t1 === 'string') {
+        isNumber = false;
+        // String times = '1day', assume 1 day offset
+      }
+    }
+
+    // Existing data shift
+    for (let i = 0; i < data.length; i++) {
+      const targetIndex = i - offset; // data[targetIndex] is moved TO data[i]
+      if (targetIndex >= 0 && smmaArray[targetIndex] !== undefined) {
+        result.push({ time: data[i].time, value: smmaArray[targetIndex] });
+      } else {
+        result.push({ time: data[i].time });
+      }
+    }
+
+    // Future data shift
+    const lastTime = data[data.length - 1]?.time;
+    if (lastTime !== undefined) {
+      // Create a Date object starting at lastTime to incrementally add days
+      const currentStringDate = isNumber ? new Date() : new Date(lastTime);
+      for (let i = 1; i <= offset; i++) {
+        const sourceIndex = data.length - 1 - offset + i;
+        if (sourceIndex >= 0 && sourceIndex < data.length && smmaArray[sourceIndex] !== undefined) {
+          let nextTime: any;
+          if (isNumber) {
+            nextTime = (lastTime as number) + (interval * i);
+          } else {
+            // Add business days approximately (just add days for simplicity of plotting future)
+            currentStringDate.setUTCDate(currentStringDate.getUTCDate() + 1);
+            if (currentStringDate.getUTCDay() === 0) currentStringDate.setUTCDate(currentStringDate.getUTCDate() + 1); // skip sunday
+            if (currentStringDate.getUTCDay() === 6) currentStringDate.setUTCDate(currentStringDate.getUTCDate() + 2); // skip saturday
+            nextTime = currentStringDate.toISOString().split('T')[0];
+          }
+          result.push({ time: nextTime, value: smmaArray[sourceIndex] });
+        }
+      }
+    }
+
+    return result;
+  };
+
+  return {
+    jaw: shiftLine(jawSmma, jawOffset),
+    teeth: shiftLine(teethSmma, teethOffset),
+    lips: shiftLine(lipsSmma, lipsOffset)
+  };
+}
