@@ -102,7 +102,7 @@ step "Building and starting services"
 cd "$DEPLOY_DIR"
 
 info "Pulling latest base images..."
-$DOCKER_COMPOSE -f "$COMPOSE_FILE" pull redis db postgres:15 nginx:1.25-alpine certbot/certbot
+$DOCKER_COMPOSE -f "$COMPOSE_FILE" pull redis db nginx certbot
 
 info "Building and starting containers in background..."
 $DOCKER_COMPOSE -f "$COMPOSE_FILE" up -d --build --remove-orphans
