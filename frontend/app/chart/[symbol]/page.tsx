@@ -2,8 +2,8 @@
 
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { useQuery } from '@tanstack/react-query';
-import { chartsApi } from '@/lib/api';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { chartsApi, drawingsApi } from '@/lib/api';
 import { StockChart } from '@/components/Chart/StockChart';
 import { ChartToolbar } from '@/components/Chart/ChartToolbar';
 import { IndicatorConfig } from '@/components/Chart/IndicatorsModal';
@@ -60,6 +60,57 @@ export default function ChartPage() {
     setDrawings(prev => prev.map(d => d.id === updated.id ? updated : d));
   }, []);
 
+  // --- Persistence Logic ---
+  const queryClient = useQueryClient();
+  const isInitialLoadRef = useRef(true);
+  
+  // Загрузка начальных рисунков
+  const { data: sessionData, refetch: refetchDrawings } = useQuery({
+    queryKey: ['drawings', symbol, 'ALL'],
+    queryFn: () => drawingsApi.get(symbol, 'ALL'),
+    enabled: !!symbol,
+    staleTime: Infinity, // Только ручная инвалидация
+  });
+
+  useEffect(() => {
+    if (sessionData && sessionData.drawings) {
+      setDrawings(sessionData.drawings);
+      isInitialLoadRef.current = true; // При загрузке новых данных мы сбрасываем флаг изменений
+    } else {
+      setDrawings([]);
+    }
+  }, [sessionData]);
+
+  // Debounced сохранение
+  useEffect(() => {
+    if (isInitialLoadRef.current) {
+      isInitialLoadRef.current = false;
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      try {
+        if (drawings.length === 0) {
+          await drawingsApi.delete(symbol, 'ALL');
+        } else {
+          await drawingsApi.save(symbol, 'ALL', drawings);
+        }
+        // Опционально: обновить кэш
+        queryClient.setQueryData(['drawings', symbol, 'ALL'], (old: any) => ({
+          ...old,
+          symbol,
+          timeframe: 'ALL',
+          drawings
+        }));
+      } catch (err) {
+        console.error('Failed to save drawing session', err);
+      }
+    }, 5000); // 5 секунд задержка после последнего изменения
+
+    return () => clearTimeout(timer);
+  }, [drawings, symbol, queryClient]);
+  // -------------------------
+
   // Подключаемся к WebSocket для получения живых тиков
   const { ticks } = useMarketWebsocket([symbol]);
   const currentTick = ticks[symbol];
@@ -88,6 +139,7 @@ export default function ChartPage() {
       setLiveData(data as any[]);
     }
   }, [data]);
+
 
   // Утилита для получения длительности таймфрейма в миллисекундах
   const getIntervalMs = (tf: Timeframe) => {
@@ -338,6 +390,7 @@ export default function ChartPage() {
           activeTool={activeTool}
           onToolChange={setActiveTool}
           onClearAll={handleClearDrawings}
+          onSyncRun={refetchDrawings}
         />
         <div className={styles.chartWrap} ref={chartContainerRef}>
           {isLoading && (

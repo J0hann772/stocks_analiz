@@ -79,12 +79,34 @@ export function DrawingCanvas({
       const timeScale = chartApi.timeScale();
       const y = seriesApi.priceToCoordinate(point.price);
       if (y === null) return null;
-      const x = timeScale.timeToCoordinate(point.time as any);
-      return { x: x !== null ? (x as number) : point.x, y: y as number };
+      
+      let targetTime = point.time;
+      if (data && data.length > 0) {
+        const targetMs = typeof targetTime === 'number' ? targetTime * 1000 : new Date(targetTime as string).getTime();
+        let minDiff = Infinity;
+        for (let i = 0; i < data.length; i++) {
+          const dTime = data[i].time as any;
+          const dMs = typeof dTime === 'number' ? dTime * 1000 : new Date(dTime).getTime();
+          const diff = Math.abs(dMs - targetMs);
+          if (diff < minDiff) {
+            minDiff = diff;
+            targetTime = dTime;
+          } else if (dMs > targetMs) {
+            break; // так как данные отсортированы по времени
+          }
+        }
+      }
+
+      const x = timeScale.timeToCoordinate(targetTime as any);
+      // Если время вне зоны (null) — мы не должны фоллбечиться на старый пиксель x.
+      // Возвращаем null, чтобы точка не рисовалась.
+      if (x === null) return null;
+      
+      return { x: x as number, y: y as number };
     } catch {
-      return { x: point.x, y: point.y };
+      return null;
     }
-  }, [chartApi, seriesApi]);
+  }, [chartApi, seriesApi, data]);
 
   // ——— Drawing loop ———
   const draw = useCallback(() => {
@@ -830,20 +852,10 @@ export function DrawingCanvas({
     };
 
     const handleCursorClick = (e: MouseEvent) => {
-      if (dragMoved) {
-        dragMoved = false;
-        return; // Don't delete after drag
-      }
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      const rect = canvas.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
-      if (x < 0 || y < 0 || x > rect.width || y > rect.height) return;
-      const hit = hitTest(x, y);
-      if (hit) {
-        onRemoveDrawing(hit.id);
-      }
+      // Курсор теперь только для выделения/перетаскивания (не удаляет).
+      // Но мы можем оставить выделение, если появится такой функционал.
+      // Само удаление перенесено в инструмент 'eraser' ("Ластик").
+      return;
     };
 
     container.addEventListener('mousedown', handleDown, true);
@@ -889,10 +901,35 @@ export function DrawingCanvas({
     return () => ro.disconnect();
   }, [containerRef]);
 
+  // Поддержка клика ластиком (срабатывает на canvas)
+  const handleEraserClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (activeTool !== 'eraser') return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    
+    // hitTest (существующая функция, проверяет столкновение по x,y)
+    const hit = hitTest(x, y);
+    if (hit) {
+      onRemoveDrawing(hit.id);
+    }
+  }, [activeTool, hitTest, onRemoveDrawing]);
+
+  // Общий handleClick маршрутизатор
+  const onCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (activeTool === 'eraser') {
+      handleEraserClick(e);
+    } else {
+      handleClick(e);
+    }
+  };
+
   return (
     <canvas
       ref={canvasRef}
-      onClick={handleClick}
+      onClick={onCanvasClick}
       onMouseDown={handleMouseDown}
       onMouseUp={handleMouseUp}
       onMouseMove={handleMouseMove}
@@ -901,8 +938,13 @@ export function DrawingCanvas({
         position: 'absolute',
         inset: 0,
         zIndex: 10,
+        // pointerEvents = auto для всех рисующих инструментов и ластика, чтобы ловить клики canvas.
+        // Для cursor = none, чтобы события проходили сквозь холст на главный график (скролл, зум) 
+        // и ловились слушателем на container.
         pointerEvents: activeTool === 'cursor' ? 'none' : 'auto',
-        cursor: activeTool === 'brush' ? 'crosshair' : 'crosshair',
+        cursor: activeTool === 'eraser' 
+          ? 'url("data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'24\' height=\'24\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'%23f44336\' stroke-width=\'2\'><path d=\'M20 20H7L3 16C2.5 15.5 2.5 14.5 3 14L13 4C13.5 3.5 14.5 3.5 15 4L20 9C20.5 9.5 20.5 10.5 20 11L11 20H20V20Z\'/><line x1=\'18\' y1=\'11\' x2=\'8\' y2=\'21\'/></svg>") 0 24, auto' 
+          : activeTool === 'cursor' ? 'default' : 'crosshair',
       }}
     />
   );

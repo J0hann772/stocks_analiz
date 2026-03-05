@@ -8,6 +8,16 @@ interface Props {
   activeTool: DrawingToolType;
   onToolChange: (tool: DrawingToolType) => void;
   onClearAll: () => void;
+  onSyncRun: () => void;
+}
+
+function SyncIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <polyline points="23 4 23 10 17 10" />
+      <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+    </svg>
+  );
 }
 
 // SVG-иконки для каждого инструмента
@@ -80,6 +90,15 @@ function BrushIcon() {
   );
 }
 
+function EraserIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M20 20H7L3 16C2.5 15.5 2.5 14.5 3 14L13 4C13.5 3.5 14.5 3.5 15 4L20 9C20.5 9.5 20.5 10.5 20 11L11 20H20V20Z" />
+      <line x1="18" y1="11" x2="8" y2="21" />
+    </svg>
+  );
+}
+
 const TOOLS: { type: DrawingToolType; icon: React.ReactNode; label: string }[] = [
   { type: 'cursor', icon: <CursorIcon />, label: 'Курсор' },
   { type: 'hline', icon: <HLineIcon />, label: 'Горизонтальная линия' },
@@ -87,9 +106,10 @@ const TOOLS: { type: DrawingToolType; icon: React.ReactNode; label: string }[] =
   { type: 'ruler', icon: <RulerIcon />, label: 'Линейка (one-shot)' },
   { type: 'sltp', icon: <SLTPIcon />, label: 'Стоп-Лосс / Тейк-Профит' },
   { type: 'brush', icon: <BrushIcon />, label: 'Кисточка (свободное рисование)' },
+  { type: 'eraser', icon: <EraserIcon />, label: 'Ластик (Удаление фигур)' },
 ];
 
-export function DrawingToolbar({ activeTool, onToolChange, onClearAll }: Props) {
+export function DrawingToolbar({ activeTool, onToolChange, onClearAll, onSyncRun }: Props) {
   return (
     <div className={styles.toolbar}>
       {TOOLS.map(tool => (
@@ -103,6 +123,13 @@ export function DrawingToolbar({ activeTool, onToolChange, onClearAll }: Props) 
         </button>
       ))}
       <div className={styles.separator} />
+      <button
+        className={styles.toolBtn}
+        onClick={onSyncRun}
+        title="Синхронизировать (загрузить с сервера)"
+      >
+        <SyncIcon />
+      </button>
       <button
         className={styles.toolBtn}
         onClick={onClearAll}

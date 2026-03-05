@@ -1,6 +1,6 @@
 // Типы для инструментов рисования на графике
 
-export type DrawingToolType = 'cursor' | 'hline' | 'trendline' | 'ruler' | 'sltp' | 'brush';
+export type DrawingToolType = 'cursor' | 'hline' | 'trendline' | 'ruler' | 'sltp' | 'brush' | 'eraser';
 
 // Точка в координатах графика (цена + время)
 export interface ChartPoint {

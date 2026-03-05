@@ -12,7 +12,7 @@ async def get_chart_data(
     timeframe: str = Query("1day", description="Таймфрейм: 1min, 5min, 15min, 30min, 1hour, 4hour, 1day"),
     from_date: Optional[str] = Query(None, alias="from", description="Дата начала YYYY-MM-DD"),
     to_date: Optional[str] = Query(None, alias="to", description="Дата конца YYYY-MM-DD"),
-    limit: int = Query(500, description="Максимальное количество свечей"),
+    limit: int = Query(600, description="Максимальное количество свечей"),
 ):
     """
     Получить исторические OHLCV данные для тикера.
