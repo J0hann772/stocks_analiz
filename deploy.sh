@@ -11,7 +11,7 @@ set -euo pipefail
 
 # ── Config ────────────────────────────────────────────────────────────────────
 REPO_URL="https://github.com/J0hann772/stocks_analiz.git"
-DEPLOY_DIR="/opt/stock_analiz"
+DEPLOY_DIR=$(pwd)
 BRANCH="main"
 COMPOSE_FILE="docker-compose.prod.yml"
 
