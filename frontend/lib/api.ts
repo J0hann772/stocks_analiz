@@ -1,4 +1,5 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const isProd = process.env.NODE_ENV === 'production';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || (isProd ? '' : 'http://localhost:8000');
 
 function getToken(): string | null {
   if (typeof window === 'undefined') return null;
