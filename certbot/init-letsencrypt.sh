@@ -62,6 +62,7 @@ for d in "${DOMAINS[@]}"; do DOMAIN_ARGS="$DOMAIN_ARGS -d $d"; done
 
 docker compose -f docker-compose.prod.yml run --rm certbot \
   certonly --webroot -w /var/www/certbot \
+  --non-interactive \
   $DOMAIN_ARGS \
   --email "$EMAIL" \
   --agree-tos \
