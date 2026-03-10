@@ -19,7 +19,14 @@ interface TickerState {
   clearTickers: () => void;
 }
 
-type AppStore = AuthState & TickerState;
+interface AppSettingsState {
+  timezone: string;
+  setTimezone: (tz: string) => void;
+  isSidebarOpen: boolean;
+  toggleSidebar: () => void;
+}
+
+type AppStore = AuthState & TickerState & AppSettingsState;
 
 export const useAppStore = create<AppStore>()(
   persist(
@@ -59,13 +66,20 @@ export const useAppStore = create<AppStore>()(
           activeTickers: state.activeTickers.filter(t => t !== symbol)
         })),
       clearTickers: () => set({ activeTickers: [] }),
+
+      // Settings State
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+      setTimezone: (tz) => set({ timezone: tz }),
+      isSidebarOpen: false,
+      toggleSidebar: () => set((state) => ({ isSidebarOpen: !state.isSidebarOpen })),
     }),
     {
       name: 'stock-analyzer-storage', // name of the item in the storage (must be unique)
       partialize: (state) => ({ 
         token: state.token, 
         isAuthenticated: state.isAuthenticated,
-        activeTickers: state.activeTickers
+        activeTickers: state.activeTickers,
+        timezone: state.timezone
       }), // only save these fields
       onRehydrateStorage: () => (state) => {
         // Once state is hydrated from localStorage, set loading to false

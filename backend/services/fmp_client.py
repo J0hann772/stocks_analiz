@@ -144,6 +144,37 @@ class FMPClient:
         data = await self._get("profile", params={"symbol": symbol})
         return data[0] if data else None
 
+    async def get_historical_backtest_data(
+        self,
+        symbol: str,
+        from_date: Optional[str] = None,
+        to_date: Optional[str] = None,
+        timeframe: str = "5min",
+    ) -> list[dict]:
+        """
+        Получить исторические данные для бэктестов.
+        Используем 5min или 15min, чтобы обойти ограничение FMP в 2 дня для 1min графиков.
+        Активно кэшируется в Redis, чтобы избежать перерасхода лимитов API.
+        """
+        params = {
+            "symbol": symbol,
+            "timeframe": timeframe,
+            "purpose": "backtest" # Специальный purpose для генерации уникального ключа
+        }
+        if from_date:
+            params["from"] = from_date
+        if to_date:
+            params["to"] = to_date
+
+        endpoint = f"historical-chart/{timeframe}"
+        
+        # Кэшируем результаты бэктеста на неделю
+        data = await self._get(endpoint, params=params, ttl=60 * 60 * 24 * 7)
+
+        if isinstance(data, list):
+            return data
+        return data.get("historical", [])
+
     async def close(self):
         if self._redis:
             await self._redis.aclose()

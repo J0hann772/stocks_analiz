@@ -9,7 +9,7 @@ from models.schemas import StrategyCreate, StrategyUpdate, StrategyOut
 router = APIRouter(prefix="/strategies", tags=["Strategies"])
 
 
-@router.post("/", response_model=StrategyOut, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=StrategyOut, status_code=status.HTTP_201_CREATED)
 async def create_strategy(
     data: StrategyCreate,
     user_id: int,                          # TODO: заменить на реальный auth dependency
@@ -28,7 +28,7 @@ async def create_strategy(
     return strategy
 
 
-@router.get("/", response_model=list[StrategyOut])
+@router.get("", response_model=list[StrategyOut])
 async def list_strategies(
     user_id: int,
     db: AsyncSession = Depends(get_db),

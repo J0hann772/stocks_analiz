@@ -2,8 +2,8 @@
 
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { chartsApi, drawingsApi } from '../../../lib/api';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { chartsApi, drawingsApi, backtestApi } from '../../../lib/api';
 import { StockChart } from '../../../components/Chart/StockChart';
 import { ChartToolbar } from '../../../components/Chart/ChartToolbar';
 import { IndicatorConfig } from '../../../components/Chart/IndicatorsModal';
@@ -11,12 +11,14 @@ import { IndicatorSettingsModal } from '../../../components/Chart/IndicatorSetti
 import { DrawingToolbar } from '../../../components/Chart/DrawingToolbar';
 import { DrawingCanvas } from '../../../components/Chart/DrawingCanvas';
 import type { DrawingToolType, DrawnObject } from '../../../components/Chart/DrawingTools.types';
+import { BacktestPanel } from '../../../components/Chart/BacktestPanel';
 import type { IChartApi, ISeriesApi } from 'lightweight-charts';
 import { calculateSMA, calculateEMA, calculateRSI, calculateADX, calculateHHLL, calculateATR, calculateAlligator, calculateHL2 } from '../../../utils/indicators';
 import type { Timeframe } from '../../../types';
 import styles from './page.module.css';
 
 import { useMarketWebsocket } from '../../../hooks/useMarketWebsocket';
+import { useAppStore } from '../../../store/useAppStore';
 
 export default function ChartPage() {
   const params = useParams<{ symbol: string }>();
@@ -34,6 +36,30 @@ export default function ChartPage() {
   const chartApiRef = useRef<IChartApi | null>(null);
   const seriesApiRef = useRef<ISeriesApi<any> | null>(null);
   const chartContainerRef = useRef<HTMLDivElement | null>(null);
+
+  // Backtest State
+  const [backtestResult, setBacktestResult] = useState<any>(null);
+
+  const runBacktestMutation = useMutation({
+    mutationFn: async () => {
+      // Basic heuristic: check if symbol looks like Crypto/Forex, else assume Stock
+      let type = 'Stocks';
+      if (symbol.endsWith('USD') || symbol.endsWith('EUR')) type = 'Crypto';
+      if (symbol.length === 6 && !symbol.includes('-')) type = 'Forex';
+      
+      const toObj = new Date();
+      const fromObj = new Date();
+      fromObj.setMonth(fromObj.getMonth() - 3);
+      const toDate = toObj.toISOString().split('T')[0];
+      const fromDate = fromObj.toISOString().split('T')[0];
+
+      return await backtestApi.run(symbol, type, fromDate, toDate);
+    },
+    onSuccess: (data) => setBacktestResult(data),
+    onError: (err: any) => alert('Ошибка бэктеста: ' + err.message)
+  });
+
+  const handleRunBacktest = () => runBacktestMutation.mutate();
 
   const handleChartReady = useCallback((chart: IChartApi, series: ISeriesApi<any>) => {
     chartApiRef.current = chart;
@@ -66,15 +92,15 @@ export default function ChartPage() {
   
   // Загрузка начальных рисунков
   const { data: sessionData, refetch: refetchDrawings } = useQuery({
-    queryKey: ['drawings', symbol, 'ALL'],
-    queryFn: () => drawingsApi.get(symbol, 'ALL'),
+    queryKey: ['drawings', symbol],
+    queryFn: () => drawingsApi.get(symbol),
     enabled: !!symbol,
     staleTime: Infinity, // Только ручная инвалидация
   });
 
   useEffect(() => {
-    if (sessionData && sessionData.drawings) {
-      setDrawings(sessionData.drawings);
+    if (Array.isArray(sessionData)) {
+      setDrawings(sessionData);
       isInitialLoadRef.current = true; // При загрузке новых данных мы сбрасываем флаг изменений
     } else {
       setDrawings([]);
@@ -91,15 +117,14 @@ export default function ChartPage() {
     const timer = setTimeout(async () => {
       try {
         if (drawings.length === 0) {
-          await drawingsApi.delete(symbol, 'ALL');
+          await drawingsApi.delete(symbol);
         } else {
-          await drawingsApi.save(symbol, 'ALL', drawings);
+          await drawingsApi.save(symbol, drawings);
         }
         // Опционально: обновить кэш
-        queryClient.setQueryData(['drawings', symbol, 'ALL'], (old: any) => ({
+        queryClient.setQueryData(['drawings', symbol], (old: any) => ({
           ...old,
           symbol,
-          timeframe: 'ALL',
           drawings
         }));
       } catch (err) {
@@ -115,15 +140,41 @@ export default function ChartPage() {
   const { ticks } = useMarketWebsocket([symbol]);
   const currentTick = ticks[symbol];
 
+  const { timezone } = useAppStore();
+  
+  const timeConverter = useMemo(() => {
+    try {
+      const dtf = new Intl.DateTimeFormat('en-US', {
+        timeZone: timezone,
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit',
+        hour12: false
+      });
+      return (utcSeconds: number) => {
+        const d = new Date(utcSeconds * 1000);
+        const parts = dtf.formatToParts(d);
+        const map: Record<string, string> = {};
+        for (const p of parts) map[p.type] = p.value;
+        const hr = +map.hour === 24 ? 0 : +map.hour;
+        const targetTarget = Date.UTC(+map.year, +map.month - 1, +map.day, hr, +map.minute, +map.second);
+        const browserNominal = Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), d.getMinutes(), d.getSeconds());
+        return utcSeconds + ((targetTarget - browserNominal) / 1000);
+      };
+    } catch (e) {
+      console.error("Timezone converter failed", e);
+      return (utcSec: number) => utcSec;
+    }
+  }, [timezone]);
+
   const { data = [], isLoading, error } = useQuery({
-    queryKey: ['chart', symbol, timeframe],
+    queryKey: ['chart', symbol, timeframe, timezone], 
     queryFn: () => chartsApi.getOHLCV(symbol, timeframe),
     select: (queryData) => {
-      const MSK_OFFSET = 3 * 3600;
       return queryData.map((d: any) => {
         if (typeof d.time === 'number') {
-          return { ...d, time: d.time + MSK_OFFSET };
+          return { ...d, time: timeConverter(d.time) };
         }
+        // For string dates (YYYY-MM-DD), no offset shift needed as hours aren't shown
         return d;
       });
     },
@@ -216,13 +267,12 @@ export default function ChartPage() {
                newData[newData.length - 1] = last;
             }
           } else {
-            // Внутридневные таймфреймы. Свечи из базы имеют time в секундах c MSK_OFFSET
+            // Внутридневные таймфреймы. Свечи из базы имеют time в секундах c shift
             // Мы должны округлить текущее время по отрезкам `intervalSec`
-            const mskOffsetSec = 3 * 3600;
-            // Убираем смещение MSK для правильного округления "минуты" в UTC
+            // Убираем смещение (shift) для правильного округления времени в UTC (свечи выравниваются по UTC минутам/часам)
             const tickTimeUTC = (tickTimeMs / 1000); 
             const candleStartUTC = Math.floor(tickTimeUTC / intervalSec) * intervalSec;
-            const expectedTimeWithOffset = candleStartUTC + mskOffsetSec;
+            const expectedTimeWithOffset = timeConverter(candleStartUTC);
 
             if (expectedTimeWithOffset > last.time) {
               // Новая свеча
@@ -248,7 +298,7 @@ export default function ChartPage() {
         });
       }
     }
-  }, [currentTick, timeframe]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [currentTick, timeframe, timeConverter]); // добавили timeConverter в зависимости
 
   function handleSymbolChange(newSymbol: string) {
     setSymbol(newSymbol);
@@ -385,6 +435,103 @@ export default function ChartPage() {
     return computedLines;
   }, [liveData, activeIndicators]);
 
+  // Compute markers and corridors from backtestResult
+  const { backtestMarkers, backtestDrawings } = useMemo(() => {
+    if (!backtestResult) return { backtestMarkers: [], backtestDrawings: [] };
+    
+    const markers: any[] = [];
+    const derivedDrawings: DrawnObject[] = [];
+    
+    // Sort trades by entry time so we can assign IDs easily
+    const trades = backtestResult.trades || [];
+    trades.forEach((trade: any, idx: number) => {
+      // Apply the same timezone shift to marker times
+      // trade.entryTime is now a UTC timestamp in seconds
+      const markerTime = timeConverter(trade.entryTime);
+      
+      // Create Marker for Entry
+      const isLong = trade.type === 'Long';
+      markers.push({
+        time: markerTime as any,
+        position: isLong ? 'belowBar' : 'aboveBar',
+        color: isLong ? '#3fb950' : '#f85149',
+        shape: isLong ? 'arrowUp' : 'arrowDown',
+        text: isLong ? 'Buy' : 'Sell',
+      });
+
+      // Create Marker for Exit
+      const exitMarkerTime = timeConverter(trade.exitTime);
+      if (exitMarkerTime) {
+        markers.push({
+          time: exitMarkerTime as any,
+          position: isLong ? 'aboveBar' : 'belowBar',
+          color: isLong ? '#f85149' : '#3fb950',
+          shape: isLong ? 'arrowDown' : 'arrowUp',
+          text: trade.reason || 'Exit',
+        });
+      }
+
+      // Add SL/TP zone drawings
+      if (trade.tp && trade.sl && exitMarkerTime) {
+        derivedDrawings.push({
+          id: `bt_sltp_${idx}`,
+          type: 'sltp',
+          points: [
+            { price: trade.entryPrice, time: markerTime, x: 0, y: 0 },
+            { price: trade.tp, time: exitMarkerTime, x: 0, y: 0 },
+            { price: trade.sl, time: exitMarkerTime, x: 0, y: 0 }
+          ],
+          color: '#8b949e',
+          lineWidth: 1
+        });
+      }
+
+      // Show Corridor only on 5m timeframe (as requested)
+      if (timeframe === '5min' || timeframe === '1min') {
+        const cHigh = trade.corridorHigh;
+        const cLow = trade.corridorLow;
+        
+        // trade.entryTime is UTC timestamp in seconds. Compute NY start of day?
+        // Let's just create a timestamp for the start of the day in UTC, then add shift.
+        // Convert to milliseconds to format it to string
+        let entryDt = new Date(trade.entryTime * 1000);
+        
+        // Find 06:00 NY or 00:00 NY equivalent depending on asset_type
+        // For simplicity, we just draw from the entry time going forward or slightly backward
+        // Actually, FMP data is in UTC or EST. 
+        // We'll draw 2 horizontal lines covering the whole day of the trade.
+        const tradeDateStr = entryDt.toISOString().split('T')[0];
+        const dayStartUTC = Math.floor(new Date(`${tradeDateStr}T00:00:00Z`).getTime() / 1000);
+        const dayEndUTC = Math.floor(new Date(`${tradeDateStr}T23:59:59Z`).getTime() / 1000);
+        const dayStart = timeConverter(dayStartUTC);
+        const dayEnd = timeConverter(dayEndUTC);
+
+        derivedDrawings.push({
+          id: `bt_cHigh_${idx}`,
+          type: 'trendline',
+          color: 'rgba(255, 255, 255, 0.4)',
+          lineWidth: 1,
+          points: [
+            { price: cHigh, time: dayStart, x: 0, y: 0 },
+            { price: cHigh, time: dayEnd, x: 0, y: 0 }
+          ]
+        });
+        derivedDrawings.push({
+          id: `bt_cLow_${idx}`,
+          type: 'trendline',
+          color: 'rgba(255, 255, 255, 0.4)',
+          lineWidth: 1,
+          points: [
+            { price: cLow, time: dayStart, x: 0, y: 0 },
+            { price: cLow, time: dayEnd, x: 0, y: 0 }
+          ]
+        });
+      }
+    });
+
+    return { backtestMarkers: markers, backtestDrawings: derivedDrawings };
+  }, [backtestResult, timeframe, timeConverter]);
+
   return (
     <div className={`${styles.page} ${isFullscreen ? styles.fullscreen : ''}`}>
       <ChartToolbar
@@ -397,6 +544,7 @@ export default function ChartPage() {
         onSymbolChange={handleSymbolChange}
         onFullscreen={() => setIsFullscreen((f: boolean) => !f)}
         onLoadPreset={(inds) => setActiveIndicators(inds)}
+        onRunBacktest={handleRunBacktest}
       />
 
       <div className={styles.chartArea}>
@@ -422,6 +570,7 @@ export default function ChartPage() {
             <>
               <StockChart
                 data={liveData as any}
+                markers={backtestMarkers}
                 indicators={indicatorLines}
                 height={560}
                 showVolume
@@ -434,7 +583,7 @@ export default function ChartPage() {
                 chartApi={chartApiRef.current}
                 seriesApi={seriesApiRef.current}
                 activeTool={activeTool}
-                drawings={drawings}
+                drawings={[...drawings, ...backtestDrawings]}
                 onAddDrawing={handleAddDrawing}
                 onRemoveDrawing={handleRemoveDrawing}
                 onUpdateDrawing={handleUpdateDrawing}
@@ -442,6 +591,9 @@ export default function ChartPage() {
                 containerRef={chartContainerRef}
                 data={liveData as any}
               />
+              {backtestResult && (
+                <BacktestPanel result={backtestResult} symbol={symbol} onClose={() => setBacktestResult(null)} />
+              )}
             </>
           )}
         </div>

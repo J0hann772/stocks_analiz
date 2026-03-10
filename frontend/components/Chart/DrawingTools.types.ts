@@ -1,6 +1,6 @@
 // Типы для инструментов рисования на графике
 
-export type DrawingToolType = 'cursor' | 'hline' | 'trendline' | 'ruler' | 'sltp' | 'brush' | 'eraser';
+export type DrawingToolType = 'cursor' | 'hline' | 'hray' | 'trendline' | 'ruler' | 'sltp' | 'brush' | 'eraser';
 
 // Точка в координатах графика (цена + время)
 export interface ChartPoint {
@@ -23,6 +23,12 @@ export interface DrawnObject {
 export interface HLineObject extends DrawnObject {
   type: 'hline';
   // points[0].price = уровень цены
+}
+
+// Горизонтальный луч (от точки вправо)
+export interface HRayObject extends DrawnObject {
+  type: 'hray';
+  // points[0] = стартовая точка (цена и пиксель для начала)
 }
 
 // Трендовая линия

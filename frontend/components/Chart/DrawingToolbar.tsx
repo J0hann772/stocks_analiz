@@ -39,6 +39,16 @@ function HLineIcon() {
   );
 }
 
+function HRayIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <line x1="6" y1="12" x2="21" y2="12" />
+      <circle cx="6" cy="12" r="1.5" fill="currentColor" />
+      <polyline points="18 9 21 12 18 15" />
+    </svg>
+  );
+}
+
 function TrendLineIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -102,6 +112,7 @@ function EraserIcon() {
 const TOOLS: { type: DrawingToolType; icon: React.ReactNode; label: string }[] = [
   { type: 'cursor', icon: <CursorIcon />, label: 'Курсор' },
   { type: 'hline', icon: <HLineIcon />, label: 'Горизонтальная линия' },
+  { type: 'hray', icon: <HRayIcon />, label: 'Горизонтальный луч' },
   { type: 'trendline', icon: <TrendLineIcon />, label: 'Трендовая линия' },
   { type: 'ruler', icon: <RulerIcon />, label: 'Линейка (one-shot)' },
   { type: 'sltp', icon: <SLTPIcon />, label: 'Стоп-Лосс / Тейк-Профит' },

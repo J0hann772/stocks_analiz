@@ -30,7 +30,7 @@ LOGGING_CONFIG = {
             "class": "logging.StreamHandler",
             "stream": "ext://sys.stdout",
             "formatter": "default",
-            "level": "WARNING",
+            "level": "INFO",
         },
         "stderr_errors": {
             "class": "logging.StreamHandler",
@@ -53,8 +53,8 @@ LOGGING_CONFIG = {
             "propagate": False,
         },
         "uvicorn.access": {
-            "handlers": [],  # Silence access log completely (nginx handles it)
-            "level": "CRITICAL",
+            "handlers": ["stdout"],  # Show request logs in docker logs
+            "level": "INFO",
             "propagate": False,
         },
         "uvicorn.error": {

@@ -27,6 +27,7 @@ interface Props {
   onSymbolChange?: (symbol: string) => void;
   onFullscreen?: () => void;
   onLoadPreset: (inds: IndicatorConfig[]) => void;
+  onRunBacktest?: () => void;
 }
 
 const USER_ID = 1; // TODO: get from auth context
@@ -41,6 +42,7 @@ export function ChartToolbar({
   onSymbolChange,
   onFullscreen,
   onLoadPreset,
+  onRunBacktest,
 }: Props) {
   const [inputSymbol, setInputSymbol] = useState(symbol);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -140,6 +142,21 @@ export function ChartToolbar({
           </button>
         ))}
       </div>
+
+      <div className={styles.divider} />
+
+      {/* Backtest Button */}
+      {onRunBacktest && (
+        <div className={styles.indGroup}>
+          <button 
+            className={styles.indBtn} 
+            onClick={onRunBacktest}
+            style={{ background: 'var(--color-secondary, #6366f1)', color: 'white', border: 'none', opacity: 0.9 }}
+          >
+            ▶ Бэктест
+          </button>
+        </div>
+      )}
 
       <div className={styles.divider} />
 

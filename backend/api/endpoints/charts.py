@@ -6,7 +6,7 @@ from services.fmp_client import fmp_client
 router = APIRouter(prefix="/charts", tags=["Charts"])
 
 
-@router.get("/{symbol}")
+@router.get("/{symbol:path}")
 async def get_chart_data(
     symbol: str,
     timeframe: str = Query("1day", description="Таймфрейм: 1min, 5min, 15min, 30min, 1hour, 4hour, 1day"),
@@ -22,13 +22,21 @@ async def get_chart_data(
     """
     try:
         import asyncio
+        # ─── Symbol normalization ─────────────────────────────
+        # FMP uses concatenated format: BTC/USD → BTCUSD, EUR/USD → EURUSD
+        clean_symbol = symbol.upper().replace('/', '')
+        
+        # FMP returns only a few candles for intraday if from_date is not provided
+        if not from_date and timeframe != "1day":
+            from_date = "2000-01-01"
+            
         candles_task = fmp_client.get_historical_chart(
-            symbol=symbol.upper(),
+            symbol=clean_symbol,
             timeframe=timeframe,
             from_date=from_date,
             to_date=to_date,
         )
-        quote_task = fmp_client.get_quote(symbol.upper())
+        quote_task = fmp_client.get_quote(clean_symbol)
         candles, quote = await asyncio.gather(candles_task, quote_task)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Ошибка получения данных FMP: {e}")
@@ -121,7 +129,7 @@ async def get_chart_data(
 
     return result
 
-@router.get("/quote/{symbol}")
+@router.get("/quote/{symbol:path}")
 async def get_realtime_quote(symbol: str):
     """
     Получить актуальную цену онлайн.

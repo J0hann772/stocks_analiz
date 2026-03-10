@@ -560,7 +560,7 @@ export function StockChart({ data, markers = [], indicators = [], height = 500, 
       // SOFT DATA UPDATE ONLY: Preserves Zoom and manual Y-Scale
       if (mainCandleRef.current) {
         mainCandleRef.current.setData(data as any);
-        if (markers.length) mainCandleRef.current.setMarkers(markers as any);
+        mainCandleRef.current.setMarkers(markers as any);
       }
       
       if (mainVolRef.current && showVolume) {

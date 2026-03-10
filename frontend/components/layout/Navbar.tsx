@@ -1,9 +1,11 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { useTheme } from '@/components/providers/ThemeProvider';
 import { useAuth } from '@/hooks/useAuth';
+import { useAppStore } from '@/store/useAppStore';
+import { authApi } from '@/lib/api';
 import styles from './Navbar.module.css';
 
 function SunIcon() {
@@ -27,19 +29,35 @@ function MoonIcon() {
 
 export function Navbar() {
   const pathname = usePathname();
-  const router = useRouter();
   const { theme, toggleTheme } = useTheme();
   const { isAuthenticated, logout } = useAuth();
+  // ✅ Call hooks at top level — not inside JSX or callbacks
+  const timezone = useAppStore((s) => s.timezone);
+  const setTimezone = useAppStore((s) => s.setTimezone);
+  const token = useAppStore((s) => s.token);
+  const toggleSidebar = useAppStore((s) => s.toggleSidebar);
 
   const nav = [
     { href: '/scanner', label: 'Скринер' },
-    { href: '/strategies', label: 'Стратегии' },
     { href: '/multichart', label: 'Multi-Chart' },
+    { href: '/backtest', label: '⚡ Бэктест' },
+    { href: '/strategies', label: 'Стратегии' },
   ];
 
   const handleLogout = () => {
     logout();
     window.location.href = '/login';
+  };
+
+  const handleTimezoneChange = async (tz: string) => {
+    setTimezone(tz);
+    if (isAuthenticated && token) {
+      try {
+        await authApi.updateTimezone(tz, token);
+      } catch (err) {
+        console.error('Failed to update timezone', err);
+      }
+    }
   };
 
   return (
@@ -64,13 +82,36 @@ export function Navbar() {
       </div>
 
       <div className={styles.actions}>
+        <select
+          className={styles.tzSelect}
+          value={timezone}
+          onChange={(e) => handleTimezoneChange(e.target.value)}
+        >
+          <option value="UTC">UTC</option>
+          <option value="America/New_York">New York (EST)</option>
+          <option value="Europe/London">London (GMT)</option>
+          <option value="Europe/Moscow">Moscow (MSK)</option>
+          <option value="Asia/Dubai">Dubai</option>
+          <option value="Asia/Tokyo">Tokyo</option>
+          <option value="Australia/Sydney">Sydney</option>
+        </select>
+
         <button className={styles.themeBtn} onClick={toggleTheme} title="Переключить тему">
           {theme === 'dark' ? <SunIcon /> : <MoonIcon />}
         </button>
+
         {isAuthenticated && (
-          <button className={styles.logoutBtn} onClick={handleLogout}>
-            Выйти
-          </button>
+          <>
+            <button
+              className={styles.portfolioBtn}
+              onClick={toggleSidebar}
+            >
+              💼 Портфель
+            </button>
+            <button className={styles.logoutBtn} onClick={handleLogout}>
+              Выйти
+            </button>
+          </>
         )}
       </div>
     </nav>

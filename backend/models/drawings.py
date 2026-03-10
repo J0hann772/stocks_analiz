@@ -4,18 +4,14 @@ from datetime import datetime
 
 # ─────────────────────────── Drawings ────────────────────────
 
-class DrawingSessionBase(BaseModel):
-    symbol: str
-    timeframe: str
-    drawings: list[Dict[str, Any]]
+class DrawingCreate(BaseModel):
+    tool_type: str
+    points: List[Dict[str, Any]]
 
-class DrawingSessionCreate(DrawingSessionBase):
-    pass
-
-class DrawingSessionOut(DrawingSessionBase):
+class DrawingOut(DrawingCreate):
     id: int
     user_id: Optional[int]
+    symbol: str
     created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}

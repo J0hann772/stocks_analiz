@@ -1,6 +1,6 @@
 services:
   api:
-    build: 
+    build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: stock_analyzer_api
@@ -59,7 +59,7 @@ services:
       - TZ=Europe/Moscow
 
   worker:
-    build: 
+    build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: stock_analyzer_worker
@@ -89,12 +89,15 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        - API_INTERNAL_URL=http://api:8000
     container_name: stock_analyzer_frontend
     restart: unless-stopped
     ports:
       - "3000:3000"
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      # Passed at build time via args above - needed for Next.js rewrites at runtime in standalone mode
+      - API_INTERNAL_URL=http://api:8000
       - TZ=Europe/Moscow
     depends_on:
       - api

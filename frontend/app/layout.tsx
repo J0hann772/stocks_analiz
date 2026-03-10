@@ -4,6 +4,7 @@ import { ThemeProvider } from '@/components/providers/ThemeProvider';
 import { QueryProvider } from '@/components/providers/QueryProvider';
 import { Navbar } from '@/components/layout/Navbar';
 import { ProtectedRoute } from '@/components/layout/ProtectedRoute';
+import { RightSidebar } from '@/components/layout/RightSidebar';
 
 export const metadata: Metadata = {
   title: 'Stock Analyzer',
@@ -29,6 +30,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <main style={{ paddingTop: 'var(--nav-height)' }}>
                 {children}
               </main>
+              <RightSidebar />
             </ProtectedRoute>
           </QueryProvider>
         </ThemeProvider>

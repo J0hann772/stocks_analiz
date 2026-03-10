@@ -160,13 +160,18 @@ export function DrawingCanvas({
   function drawObject(ctx: CanvasRenderingContext2D, obj: DrawnObject, w: number, _h: number) {
     ctx.lineWidth = obj.lineWidth || 2;
 
-    if (obj.type === 'hline') {
+    if (obj.type === 'hline' || obj.type === 'hray') {
       const p = chartToPixel(obj.points[0]);
       if (!p) return;
       ctx.strokeStyle = obj.color;
-      ctx.setLineDash([6, 4]);
+      if (obj.type === 'hline') {
+        ctx.setLineDash([6, 4]);
+      } else {
+        ctx.setLineDash([]); // Ray is solid
+      }
       ctx.beginPath();
-      ctx.moveTo(0, p.y);
+      // Line from 0 for hline, from p.x for hray
+      ctx.moveTo(obj.type === 'hline' ? 0 : p.x, p.y);
       ctx.lineTo(w, p.y);
       ctx.stroke();
       ctx.setLineDash([]);
@@ -278,6 +283,11 @@ export function DrawingCanvas({
     if (obj.type === 'hline') {
       const p = chartToPixel(obj.points[0]);
       if (p) drawSquare(40, p.y);
+    }
+
+    if (obj.type === 'hray') {
+      const p = chartToPixel(obj.points[0]);
+      if (p) drawSquare(p.x, p.y);
     }
 
     if (obj.type === 'trendline' && obj.points.length >= 2) {
@@ -422,12 +432,16 @@ export function DrawingCanvas({
   ) {
     ctx.globalAlpha = 0.7;
 
-    if (tool === 'hline') {
+    if (tool === 'hline' || tool === 'hray') {
       ctx.strokeStyle = '#f0b429';
-      ctx.setLineDash([6, 4]);
+      if (tool === 'hline') {
+        ctx.setLineDash([6, 4]);
+      } else {
+        ctx.setLineDash([]);
+      }
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.moveTo(0, mouse.y);
+      ctx.moveTo(tool === 'hline' ? 0 : mouse.x, mouse.y);
       ctx.lineTo(w, mouse.y);
       ctx.stroke();
       ctx.setLineDash([]);
@@ -586,6 +600,11 @@ export function DrawingCanvas({
         if (p && Math.abs(y - p.y) < HIT_TOLERANCE) return obj;
       }
 
+      if (obj.type === 'hray') {
+        const p = chartToPixel(obj.points[0]);
+        if (p && Math.abs(y - p.y) < HIT_TOLERANCE && x >= p.x - HIT_TOLERANCE) return obj;
+      }
+
       if (obj.type === 'trendline' && obj.points.length >= 2) {
         const p1 = chartToPixel(obj.points[0]);
         const p2 = chartToPixel(obj.points[1]);
@@ -643,6 +662,10 @@ export function DrawingCanvas({
         const p = chartToPixel(obj.points[0]);
         if (p && Math.abs(y - p.y) < TOL && x < 60) return { id: obj.id, pointIndex: 0 };
       }
+      if (obj.type === 'hray') {
+        const p = chartToPixel(obj.points[0]);
+        if (p && Math.abs(x - p.x) < TOL && Math.abs(y - p.y) < TOL) return { id: obj.id, pointIndex: 0 };
+      }
       if ((obj.type === 'trendline' || obj.type === 'ruler') && obj.points.length >= 2) {
         for (let pi = 0; pi < 2; pi++) {
           const p = chartToPixel(obj.points[pi]);
@@ -676,6 +699,11 @@ export function DrawingCanvas({
 
     if (activeTool === 'hline') {
       onAddDrawing({ id: nextId(), type: 'hline', points: [point], color: '#f0b429', lineWidth: 2 });
+      onToolComplete();
+    }
+
+    if (activeTool === 'hray') {
+      onAddDrawing({ id: nextId(), type: 'hray', points: [point], color: '#f0b429', lineWidth: 2 });
       onToolComplete();
     }
 

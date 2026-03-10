@@ -1,0 +1,1 @@
+import asyncio; from services.fmp_client import fmp_client; async def run(): data = await fmp_client.get_historical_1m_data('TSLA', '2025-12-10', '2026-03-10'); print(f'TSLA loaded {len(data)} candles'); asyncio.run(run())

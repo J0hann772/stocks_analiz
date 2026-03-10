@@ -79,3 +79,20 @@ async def get_me(
         if _simple_token(user.email) == token:
             return user
     raise HTTPException(status_code=401, detail="Неверный токен")
+
+@router.put("/me/timezone", response_model=UserOut)
+async def update_timezone(
+    timezone: str,
+    token: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Обновить часовой пояс пользователя."""
+    result = await db.execute(select(User))
+    users = result.scalars().all()
+    for user in users:
+        if _simple_token(user.email) == token:
+            user.timezone = timezone
+            await db.commit()
+            await db.refresh(user)
+            return user
+    raise HTTPException(status_code=401, detail="Неверный токен")

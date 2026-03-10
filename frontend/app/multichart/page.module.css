@@ -48,3 +48,24 @@
 .expandedTitle { font-weight: 800; font-size: 20px; font-family: var(--font-mono); color: var(--color-primary); }
 .collapseBtn { padding: 6px 12px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: transparent; color: var(--color-text-muted); font-size: 13px; transition: all 0.15s; }
 .collapseBtn:hover { color: var(--color-text); background: var(--color-surface-2); }
+
+/* Tab Switcher */
+.tabGroup { display: flex; gap: 4px; }
+.tabBtn { padding: 6px 14px; border-radius: var(--radius-sm); border: 1px solid var(--color-border); background: transparent; color: var(--color-text-muted); font-size: 13px; font-weight: 500; transition: all 0.15s; cursor: pointer; }
+.tabBtn:hover { background: var(--color-surface-2); color: var(--color-text); }
+.tabActive { background: var(--color-primary) !important; color: #fff !important; border-color: var(--color-primary) !important; }
+
+.divider { width: 1px; height: 24px; background: var(--color-border); margin: 0 4px; }
+
+/* Remove button on card */
+.cardBtnRemove { padding: 2px 6px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: transparent; color: #f85149; font-size: 14px; cursor: pointer; transition: all 0.15s; }
+.cardBtnRemove:hover { background: rgba(248,81,73,0.1); }
+
+/* Portfolio Tab */
+.portfolioTab { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.portfolioToolbar { display: flex; align-items: center; gap: 12px; padding: 10px 16px; flex-wrap: wrap; border-bottom: 1px solid var(--color-border); }
+.typeGroup { display: flex; gap: 2px; }
+.typeBtn { padding: 4px 10px; border-radius: var(--radius-sm); border: 1px solid var(--color-border); background: transparent; color: var(--color-text-muted); font-size: 12px; cursor: pointer; }
+.typeActive { background: color-mix(in srgb, var(--color-primary) 20%, transparent); color: var(--color-primary); border-color: var(--color-primary); }
+
+.emptyPortfolio { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--color-text-muted); text-align: center; font-size: 15px; }
