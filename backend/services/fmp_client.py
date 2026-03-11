@@ -30,7 +30,7 @@ class FMPClient:
             self._redis = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
         return self._redis
 
-    async def _get(self, endpoint: str, params: dict = None, ttl: int = None) -> Any:
+    async def _get(self, endpoint: str, params: dict = None, ttl: int = None, quiet_errors: list[int] = None) -> Any:
         """Выполнить GET-запрос к FMP, используя Redis-кэш."""
         params = params or {}
         fmp_params = params.copy()
@@ -63,10 +63,14 @@ class FMPClient:
             async with session.get(url, params=fmp_params) as response:
                 if response.status != 200:
                     text = await response.text()
-                    logger.error("FMP API Error %d: %s", response.status, text)
+                    if quiet_errors and response.status in quiet_errors:
+                        logger.debug("FMP API Error %d on %s (muted)", response.status, url)
+                    else:
+                        logger.error("FMP API Error %d on %s: %s", response.status, url, text)
                     response.raise_for_status()
                 
                 data = await response.json()
+
 
         # Динамический TTL в зависимости от timeframe (если есть)
         actual_ttl = ttl

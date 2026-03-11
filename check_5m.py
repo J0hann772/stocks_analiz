@@ -1,1 +1,0 @@
-import asyncio; from services.fmp_client import fmp_client; async def run(): data_5m = await fmp_client.get_historical_data('TSLA', '5min', '2025-12-10', '2026-03-10'); print(f'TSLA 5min: {len(data_5m)} candles'); if data_5m: print(f'Oldest: {data_5m[-1][\'date\']}'); print(f'Newest: {data_5m[0][\'date\']}'); await fmp_client.close(); asyncio.run(run())

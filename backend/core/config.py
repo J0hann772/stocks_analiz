@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     TG_CHAT_ID: str = ""
     TG_SIGNAL_BOT_TOKEN: str = ""
 
+    # Let's Encrypt / Admin
+    ADMIN_EMAIL: str = "gea54845@mail.ru"
+
     @property
     def async_database_url(self) -> str:
         return f"postgresql+asyncpg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"

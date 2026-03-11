@@ -1,120 +1,108 @@
-# stockscreener.ru — Инструкция по деплою
+# Инструкция по деплою проекта Stock Analyzer (Production)
 
-## Требования на сервере
+Этот проект настроен для полноценного продакшена: Nginx, SSL от Let's Encrypt, фоновые воркеры и база данных. Все упаковано в Docker Compose.
 
-- Linux (Ubuntu 22.04 рекомендуется)
-- Docker >= 24.0
-- Docker Compose v2 (`docker compose`)
-- DNS: A-запись `stockscreener.ru` и `www.stockscreener.ru` → IP сервера
+## 📌 Что подготовить ДО начала:
+
+1. **Сервер**: Любой VPS с Ubuntu 22.04+ (минимум 2GB RAM, желательно 4GB).
+2. **Доменное имя**: Например, `stockscreener.ru`.
+3. **DNS записи**: В панели регистратора домена (или Cloudflare) направьте **A-записи** для `stockscreener.ru` и `www.stockscreener.ru` на IP-адрес вашего сервера. Дождитесь обновления DNS (обычно 5-15 минут).
 
 ---
 
-## Первый деплой
+## 🚀 Деплой с нуля (Пошагово)
 
-### 1. deploy.sh — всё автоматически
+### Шаг 1: Подготовка сервера
+
+Подключитесь к вашему серверу по SSH:
 
 ```bash
-# Первый деплой (клонирует repo, настраивает SSL)
-bash <(curl -s https://raw.githubusercontent.com/J0hann772/stocks_analiz/main/deploy.sh) --init
+ssh root@IP_ВАШЕГО_СЕРВЕРА
 ```
 
-Или если уже скачан:
+Обновите систему и установите Docker с Git:
 
 ```bash
-# Первый деплой (с получением SSL)
-bash deploy.sh --init
-
-# Обновление без rebuild
-bash deploy.sh
-
-# Обновление с полной пересборкой
-bash deploy.sh --rebuild
+apt update && apt upgrade -y
+apt install git curl docker.io docker-compose-v2 -y
 ```
 
-### 2. Что делает скрипт автоматически
+### Шаг 2: Скачивание проекта
 
-1. Клонирует / обновляет repo с `https://github.com/J0hann772/stocks_analiz.git`
-2. Если `.env` нет — просит заполнить из шаблона `.env.prod`
-3. При `--init` получает SSL-сертификат от Let's Encrypt
-4. Обновляет базовые образы (pull), **пересобирает** проект и запускает все сервисы в фоне
-5. **Автоматически выводит логи** (`docker compose logs -f`) после запуска
-
-### 3. Единственное, что нужно сделать вручную
+Склонируйте свой репозиторий с проектом:
 
 ```bash
-# Перед первым запуском — заполни реальные секреты
+git clone https://github.com/J0hann772/stocks_analiz.git
+cd stocks_analiz
+```
+
+_(Если репозиторий приватный, используйте Github Personal Access Token)_
+
+### Шаг 3: Настройка секретов (.env)
+
+Переименуйте шаблон продакшн-окружения в рабочий `.env` файл:
+
+```bash
 cp .env.prod .env
+```
+
+Отредактируйте `.env` файл (вставьте ваши настоящие API-ключи FMP, Telegram токены и т.д.):
+
+```bash
 nano .env
 ```
 
----
+_(Для сохранения в nano: `Ctrl+O` -> `Enter` -> `Ctrl+X`)_
 
-## Последующие обновления
+### Шаг 4: Получение БЕСПЛАТНОГО официального SSL-сертификата
 
-```bash
-git pull
-docker compose -f docker-compose.prod.yml build --no-cache
-docker compose -f docker-compose.prod.yml up -d --remove-orphans
-```
+Я заранее подготовил скрипт для получения сертификата от **Let's Encrypt**. Он автоматически стучится к ним с привязанной почтой **`gea54845@mail.ru`**, подтверждает владение доменом и скачивает официальные крипто-ключи.
 
----
-
-## Полезные команды
+Просто запустите:
 
 ```bash
-# Логи API
-docker logs stock_analyzer_api -f
-
-# Логи nginx
-docker logs stock_nginx -f
-
-# Ошибки SSL
-docker logs stock_certbot -f
-
-# Проверка сертификата
-docker compose -f docker-compose.prod.yml run --rm certbot certificates
-
-# Принудительное продление сертификата
-docker compose -f docker-compose.prod.yml run --rm certbot renew --force-renewal
-
-# Перезагрузить nginx (после обновления конфига)
-docker compose -f docker-compose.prod.yml exec nginx nginx -s reload
+chmod +x certbot/init-letsencrypt.sh deploy.sh
+./certbot/init-letsencrypt.sh
 ```
+
+> **Внимание:** Скрипт спросит, хотите ли вы получить сертификат. Везде жмите `Y` или `Enter`. Скрипт поднимет временный сервер, скачает ключи и сам перезапустит Nginx.
+
+### Шаг 5: Запуск проекта в Production!
+
+Теперь, когда ключи получены, запускаем и собираем весь проект окончательно:
+
+```bash
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
+**Все готово!**
+Проект будет доступен по адресу: `https://ваштестдомен.ru`!
 
 ---
 
-## Структура файлов деплоя
+## 🔄 Как выпускать обновления (когда изменили код)
 
+Я создал скрипт `deploy.sh` для быстрого обновления.
+Если вы залили новый код на GitHub и хотите обновить его на сервере, просто выполните:
+
+```bash
+cd stocks_analiz
+./deploy.sh
 ```
-docker-compose.prod.yml   # Продакшн-конфиг (nginx + certbot + все сервисы)
-nginx/
-  nginx.conf              # Основная конфигурация: rate-limit, bad-bot block, логи
-  conf.d/
-    default.conf          # HTTPS, SSL, прокси на api/frontend, WebSocket
-certbot/
-  init-letsencrypt.sh     # Скрипт первичного получения сертификата
-  conf/                   # SSL сертификаты (НЕ в git!)
-  www/                    # Webroot для ACME challenge
-.env.prod                 # Шаблон prod-переменных (НЕ в git!)
-backend/core/
-  logging_config.py       # Централизованный логгинг с timestamp
-```
+
+Этот скрипт автоматически скачает последние изменения, пересоберет контейнеры без остановки (zero-downtime) и покажет свежие логи.
 
 ---
 
-## Защита от DDoS и сканеров
+## 🛠️ Полезные команды для администрирования
 
-В `nginx/conf.d/default.conf` настроено:
+- **Посмотреть логи API**:
+  `docker compose -f docker-compose.prod.yml logs -f api`
+- **Посмотреть логи воркера (сканера)**:
+  `docker compose -f docker-compose.prod.yml logs -f worker`
+- **Остановить все**:
+  `docker compose -f docker-compose.prod.yml down`
+- **Перезапустить сервер целиком**:
+  `docker compose -f docker-compose.prod.yml restart`
 
-- **Rate limiting**: 10 req/s для API, 3 req/s для авторизации, burst-защита
-- **Блокировка путей**: `/.env`, `/.git`, `/wp-admin`, `/phpmyadmin`, SQL/backup-файлы → **403**
-- **Блокировка User-Agent**: nikto, sqlmap, nmap, masscan, zgrab и другие → **444** (drop)
-- **HSTS**: HTTP Strict Transport Security на год вперёд
-- **Скрытие версии**: nginx не раскрывает свою версию
-
-## Логирование
-
-- Все сервисы: формат `2026-03-05 23:15:00 [ERROR] ...`
-- Шум (request-логи, SQL-запросы, httpx connection) — отключён
-- Все ошибки (ERROR и выше) всегда выводятся
-- Nginx access-лог: ISO8601 формат в `/var/log/nginx/access.log`
+> **О сертификатах:** Nginx и Certbot уже настроены так, чтобы автоматически продлевать бесплатные сертификаты Let's Encrypt каждые 2 месяца (Auto-renewal). Лишних действий делать не нужно.

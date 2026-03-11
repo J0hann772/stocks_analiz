@@ -27,7 +27,7 @@ DOMAIN=${DOMAIN:-"stockscreener.ru"}
 domains=($DOMAIN www.$DOMAIN)
 rsa_key_size=4096
 data_path="./certbot"
-email="${EMAIL:-}"
+email="${EMAIL:-gea54845@mail.ru}"
 staging=0 # Set to 1 if you're testing your setup to avoid hitting request limits
 
 # Проверяем наличие существующих сертификатов (не просто папки certbot)
