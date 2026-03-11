@@ -16,12 +16,14 @@ if ! [ -x "$(command -v docker)" ]; then
   exit 1
 fi
 
-# Подтягиваем переменные окружения
+# Подтягиваем переменные окружения корректно (поддерживает пробелы в значениях)
+set -a
 if [ -f .env.prod ]; then
-  export $(grep -v '^#' .env.prod | xargs)
+  source .env.prod
 elif [ -f .env ]; then
-  export $(grep -v '^#' .env | xargs)
+  source .env
 fi
+set +a
 
 DOMAIN=${DOMAIN:-"stockscreener.ru"}
 domains=($DOMAIN www.$DOMAIN)
