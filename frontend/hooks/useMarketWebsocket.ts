@@ -25,8 +25,14 @@ export function useMarketWebsocket(symbols: string[]) {
   const symbolsKey = JSON.stringify(symbols);
 
   const connect = useCallback(() => {
-    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-    const wsUrl = baseUrl.replace(/^http/, 'ws') + '/api/v1/ws/market';
+    let wsUrl = '';
+    const envUrl = process.env.NEXT_PUBLIC_API_URL;
+    if (envUrl) {
+      wsUrl = envUrl.replace(/^http/, 'ws') + '/api/v1/ws/market';
+    } else {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      wsUrl = `${protocol}//${window.location.host}/api/v1/ws/market`;
+    }
 
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
